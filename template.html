@@ -125,6 +125,37 @@ details[open] summary::before{content:"뉴스 접기 ▴"}
 .acc .r{display:flex; justify-content:space-between; padding:6px 0; border-top:1px solid var(--line)}
 .acc .r:first-of-type{border-top:0}
 .acc p{font-size:13px; color:var(--sub); margin:8px 0 0}
+.term,.tl{border:0; background:none; padding:0; font:inherit; color:inherit; cursor:pointer;
+  text-decoration:underline dotted; text-underline-offset:3px; text-decoration-color:var(--sub)}
+.q{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; margin-left:4px;
+  border-radius:50%; border:1px solid var(--line); background:var(--panel); color:var(--sub);
+  font:inherit; font-size:12px; font-weight:700; cursor:pointer; vertical-align:1px}
+[data-term]{cursor:pointer}
+.prob small{text-decoration:underline dotted; text-underline-offset:3px}
+.hint{font-size:13px; color:var(--sub); margin:10px 2px 0}
+.sig button{font:inherit; font-size:12px; padding:2px 8px; border-radius:6px; border:0; background:var(--track);
+  color:var(--sub); cursor:pointer; text-decoration:underline dotted; text-underline-offset:2px}
+.gloss{background:var(--panel); border-radius:14px; padding:4px 16px}
+.gloss details{border-top:1px solid var(--line); margin:0; padding:12px 0}
+.gloss details:first-child{border-top:0}
+.gloss summary{font-size:15px; font-weight:700; color:var(--ink)}
+.gloss details summary::before,.gloss details[open] summary::before{content:none}
+.gloss summary::after{content:"＋"; float:right; color:var(--sub)}
+.gloss details[open] summary::after{content:"－"}
+.gb h4,#sheetBody h4{font-size:13px; color:var(--sub); margin:14px 0 4px}
+.gb p,#sheetBody p{margin:0; font-size:15px; line-height:1.65}
+.gb ul,#sheetBody ul{margin:0; padding-left:18px; font-size:15px; line-height:1.65}
+.gb li,#sheetBody li{margin:4px 0}
+dialog#sheet{border:0; padding:0; margin:auto auto 0; width:100%; max-width:560px; max-height:80vh;
+  border-radius:18px 18px 0 0; background:var(--panel); color:var(--ink); overflow:auto}
+dialog#sheet::backdrop{background:rgba(0,0,0,.45)}
+.sheet-in{padding:18px 20px calc(24px + env(safe-area-inset-bottom,0))}
+.sheet-head{display:flex; align-items:center; justify-content:space-between; gap:12px}
+.sheet-head h3{margin:0; font-size:19px; font-weight:800}
+#sheetClose{border:1px solid var(--line); background:var(--bg); color:var(--ink); font:inherit; font-size:14px;
+  font-weight:600; border-radius:999px; padding:6px 14px; min-height:36px; cursor:pointer}
+@media (prefers-reduced-motion:no-preference){dialog#sheet[open]{animation:up .2s ease-out}}
+@keyframes up{from{transform:translateY(24px); opacity:0}to{transform:none; opacity:1}}
 footer{font-size:12px; color:var(--sub); margin-top:24px; line-height:1.6}
 .empty{padding:24px 16px; color:var(--sub); text-align:center}
 </style>
@@ -153,11 +184,22 @@ footer{font-size:12px; color:var(--sub); margin-top:24px; line-height:1.6}
     </div>
     <div class="tally" id="tally"></div>
   </div>
+  <p class="hint">점선 밑줄이 있는 단어나 ?를 누르면 쉬운 설명이 나와요.</p>
 
   <main id="main"></main>
 
-  <h2>지금까지 예측 적중률</h2>
+  <h2>지금까지 예측 적중률 <button class="q" data-term="acc" aria-label="적중률 설명">?</button></h2>
   <section class="acc" id="acc"></section>
+
+  <h2>처음이라면: 용어 풀이</h2>
+  <section class="gloss" id="gloss"></section>
+
+  <dialog id="sheet" aria-labelledby="sheetTitle">
+    <div class="sheet-in">
+      <div class="sheet-head"><h3 id="sheetTitle"></h3><button id="sheetClose">닫기</button></div>
+      <div id="sheetBody"></div>
+    </div>
+  </dialog>
 
   <footer>
     상승 확률은 과거 변동성·추세·뉴스 심리를 합친 통계적 추정이며, 범위는 약 68% 확률 구간입니다.
@@ -193,7 +235,7 @@ function signals(s, rsi){
   const r = rsi >= 70 ? "과열" : rsi <= 30 ? "침체" : "보통";
   const n = s.news > .15 ? "긍정" : s.news < -.15 ? "부정" : "중립";
   const m = s.mom > .3 ? "강함" : s.mom < -.3 ? "약함" : "보통";
-  return `<span>뉴스 ${n}</span><span>이평선 ${t}</span><span>모멘텀 ${m}</span><span>RSI ${rsi} ${r}</span>`;
+  return `<button data-term="news">뉴스 ${n}</button><button data-term="trend">이평선 ${t}</button><button data-term="mom">모멘텀 ${m}</button><button data-term="rsi">RSI ${rsi} ${r}</button>`;
 }
 
 function newsBlock(a){
@@ -221,13 +263,13 @@ function row(a){
     <div class="top">
       <button class="star" data-k="${esc(key(a))}" aria-pressed="${favs.has(key(a))}" aria-label="${esc(a.name)} 관심 등록">★</button>
       <span class="name">${esc(a.name)}</span>
-      <span class="price"><b>${num(a.last)}</b><span class="${tone(a.chg1d)}">${pct(a.chg1d,2)}</span></span>
+      <span class="price" data-term="price"><b>${num(a.last)}</b><span class="${tone(a.chg1d)}">${pct(a.chg1d,2)}</span></span>
     </div>
     <div class="verdict">
-      <div class="prob ${cls}">${Math.round(p*100)}%<small>${label}</small></div>
+      <div class="prob ${cls}" data-term="prob" role="button" tabindex="0">${Math.round(p*100)}%<small>${label}</small></div>
       <div class="gauge">
         <div class="track"><div class="fill bg-${cls}" style="left:${left}%;width:${width}%"></div></div>
-        <div class="range"><span>예상 <b class="${tone(f.exp)}">${pct(f.exp)}</b></span><span>${pct(f.lo)} ~ ${pct(f.hi)}</span></div>
+        <div class="range"><span><button class="term" data-term="range">예상</button> <b class="${tone(f.exp)}">${pct(f.exp)}</b></span><span>${pct(f.lo)} ~ ${pct(f.hi)}</span></div>
       </div>
       ${spark(a.spark)}
     </div>
@@ -243,7 +285,7 @@ function render(){
   const groups = ["지수","섹터"];
   let html = "";
   const picks = (D.stocks || []).filter(s => s.market === mk).sort((x,y) => y.forecast[hz].p_up - x.forecast[hz].p_up).slice(0, 5);
-  if (picks.length) html += `<h2>신호 상위 종목</h2><div class="picks">${picks.map((s,i) => {
+  if (picks.length) html += `<h2>신호 상위 종목 <button class="q" data-term="picks" aria-label="신호 상위 종목 설명">?</button></h2><div class="picks">${picks.map((s,i) => {
     const f = s.forecast[hz], c = verdict(f.p_up)[1];
     return `<div class="pick"><span class="rank">${i+1}</span><div><div class="nm">${esc(s.name)}</div><div class="sec">${esc(s.sector)}　${num(s.last)} <span class="${tone(s.chg1d)}">${pct(s.chg1d,2)}</span></div></div><div class="pp ${c}">${Math.round(f.p_up*100)}%<small>예상 ${pct(f.exp)}</small></div></div>`;
   }).join("")}</div>`;
@@ -257,7 +299,7 @@ function render(){
   const c = {up:0, flat:0, down:0};
   list.forEach(a => c[verdict(a.forecast[hz].p_up)[1]]++);
   document.getElementById("tally").innerHTML =
-    `상승 우위 <b class="up">${c.up}</b>　중립 <b>${c.flat}</b>　하락 우위 <b class="down">${c.down}</b>`;
+    `상승 우위 <b class="up">${c.up}</b>　중립 <b>${c.flat}</b>　하락 우위 <b class="down">${c.down}</b> <button class="q" data-term="horizon" aria-label="기간 설명">?</button>`;
 }
 
 function bind(id, name, get, set){
@@ -320,7 +362,7 @@ document.getElementById("meta").innerHTML =
   (D.demo ? `<span class="demo">데모 데이터</span>` : "");
 
 document.getElementById("macro").innerHTML = D.macro.map(m =>
-  `<div><small>${esc(m.name)}</small><b>${num(m.value)}</b><i class="${tone(m.chg)}">${pct(m.chg)}</i></div>`).join("");
+  `<div data-term="${({"VIX 공포지수": "vix", "원/달러": "fx", "미 10년물 금리": "rate"})[m.name] || ""}"><small class="tl">${esc(m.name)}</small><b>${num(m.value)}</b><i class="${tone(m.chg)}">${pct(m.chg)}</i></div>`).join("");
 
 const names = {day:"다음 거래일", week:"1주", month:"1개월"};
 document.getElementById("acc").innerHTML = Object.entries(names).map(([k,n]) => {
@@ -330,6 +372,86 @@ document.getElementById("acc").innerHTML = Object.entries(names).map(([k,n]) => 
   const v2 = t.n >= 20 ? `<b>${Math.round(t.hit/t.n*100)}%</b> (${t.n}건)` : `기록 쌓는 중 (${t.n}건)`;
   return `<div class="r"><span>${n} 지수·섹터</span><span>${v}</span></div><div class="r"><span>${n} 종목</span><span>${v2}</span></div>`;
 }).join("") + `<p>방향(오름/내림)을 맞힌 비율입니다. 50% 근처면 동전 던지기 수준이니, 55%를 꾸준히 넘는지 지켜보세요.</p>`;
+
+// ───────── 용어 풀이 ─────────
+const GLOSS = {
+  vix: {t: "VIX 공포지수",
+    what: "앞으로 한 달 동안 미국 S&P 500 지수가 얼마나 크게 출렁일지 투자자들이 예상하는 정도를 숫자로 만든 지수예요.",
+    easy: "시장의 '불안 온도계'예요. 사람들이 겁을 먹을수록 숫자가 올라가요.",
+    read: ["15 아래: 평온한 시장", "15~20: 보통", "20~30: 긴장한 시장. 하루에도 주가가 크게 흔들리기 쉬워요.", "30 이상: 공포 구간. 이럴 땐 이 화면의 확률도 평소보다 덜 믿는 게 좋아요.", "다만 공포가 극에 달한 뒤에 반등이 나오는 경우도 많아요."]},
+  fx: {t: "원/달러 환율",
+    what: "1달러를 사려면 원화가 얼마 필요한지를 나타내요. 1,350이면 1달러에 1,350원이라는 뜻이에요.",
+    easy: "숫자가 오르면 원화 값이 떨어진 거예요(원화 약세). 해외여행 갈 때 달러가 비싸지는 상황이죠.",
+    read: ["환율이 빠르게 오르면 외국인 투자자가 한국 주식을 팔고 나가는 경향이 있어 코스피에 부담이 돼요.", "반대로 자동차·반도체 같은 수출 기업은 같은 물건을 팔아도 원화로 더 많이 벌어서 실적에는 도움이 되기도 해요.", "하루에 ±0.5% 넘게 움직이면 큰 변화로 보면 돼요."]},
+  rate: {t: "미 10년물 금리",
+    what: "미국 정부가 10년 동안 돈을 빌릴 때 주는 이자율이에요. 전 세계 금리와 주식 가치의 기준이 돼요.",
+    easy: "'가장 안전한 곳에 돈을 맡기면 받는 이자'예요. 이 이자가 높으면 굳이 위험한 주식을 살 이유가 줄어들어요.",
+    read: ["금리가 오르면: 미래 성장에 기대는 기술주·반도체·성장주에 불리해요.", "금리가 오르면: 대출 이자를 더 받는 은행주에는 유리한 경우가 많아요.", "금리가 내리면 반대로 생각하면 돼요.", "화면의 %는 금리 숫자 자체가 변한 비율이에요. 4.50 → 4.59면 +2%로 표시되고, 이 정도면 꽤 큰 움직임이에요."]},
+  price: {t: "현재가와 등락률",
+    what: "마지막 거래일의 종가와, 그 전날보다 몇 % 올랐는지 내렸는지예요.",
+    easy: "어제 대비 성적표예요. 한국식으로 빨강은 상승, 파랑은 하락이에요.",
+    read: ["지수는 포인트, 한국 종목·ETF는 원, 미국 종목은 달러 단위예요.", "섹터는 그 섹터를 대표하는 ETF(여러 종목을 묶은 상품) 가격으로 보여줘요.", "오른쪽 작은 선 그래프는 최근 약 3달(60거래일) 흐름이에요. 기간 전체로 올랐으면 빨강, 내렸으면 파랑이에요."]},
+  prob: {t: "상승 확률",
+    what: "선택한 기간(1일·1주·1개월·1년)이 지난 뒤 지금보다 가격이 높을 가능성을 추정한 값이에요.",
+    easy: "일기예보의 '비 올 확률 60%'와 같아요. 60%여도 비가 안 올 수 있듯, 확실하다는 뜻이 아니에요.",
+    read: ["55% 이상: 상승 우위 (빨강)", "45~55%: 중립. 어느 쪽인지 뚜렷하지 않아요.", "45% 이하: 하락 우위 (파랑)", "이 모델은 일부러 보수적으로 만들어서 60%를 넘는 경우가 드물어요. 55%만 돼도 꽤 기운 편이에요.", "가운데 세로선이 50%이고, 막대가 그 선에서 얼마나 기울었는지 보여줘요."]},
+  range: {t: "예상과 범위",
+    what: "'예상'은 가장 그럴듯한 중간 수익률이고, 오른쪽 범위는 10번 중 7번 정도는 그 안에서 끝날 거라는 구간이에요.",
+    easy: "택시 앱의 '예상 도착 15분, 12~20분 사이'와 같아요.",
+    read: ["범위가 넓을수록 위아래로 크게 흔들리는, 위험한 대상이에요.", "같은 55%라도 범위가 ±1%인 것과 ±5%인 것은 전혀 달라요. 좁은 쪽이 마음 편한 쪽이에요.", "범위의 왼쪽(아래쪽) 숫자는 '나쁜 경우 이 정도는 각오해야 한다'로 읽으면 돼요.", "10번 중 3번은 범위 밖으로 벗어난다는 점도 기억하세요."]},
+  news: {t: "뉴스 심리",
+    what: "최근 2일 동안 나온 뉴스 제목에 긍정적인 표현이 많은지, 부정적인 표현이 많은지를 점수로 매긴 거예요.",
+    easy: "동네 분위기 같은 거예요. '요즘 그 가게 잘된대'라는 소문이 돌면 손님이 몰리죠.",
+    read: ["1일·1주 같은 짧은 기간 확률에 크게 반영돼요.", "좋은 뉴스는 이미 가격에 반영됐을 수도 있어요. 뉴스는 긍정인데 가격이 안 오르면 힘이 약하다는 신호일 수 있어요.", "카드의 '뉴스 보기'를 눌러 실제 제목을 직접 확인해 보세요."]},
+  trend: {t: "이평선 (정배열·역배열·혼조)",
+    what: "이평선은 '이동평균선'의 줄임말로, 최근 며칠 동안의 종가 평균이에요. 여기서는 20일(약 1달), 60일(약 3달), 120일(약 6달) 평균을 써요.",
+    easy: "시험 성적 평균과 같아요. 최근 1달 평균이 3달 평균보다 높고, 3달 평균이 6달 평균보다 높으면 '요즘 계속 성적이 오르는 학생'이에요.",
+    read: ["정배열: 현재가 > 1달 평균 > 3달 평균 > 6달 평균. 꾸준한 상승 추세예요.", "역배열: 그 반대. 꾸준한 하락 추세예요.", "혼조: 순서가 섞여 있어요. 방향이 정해지지 않았거나 추세가 바뀌는 중이에요.", "1개월·1년 같은 긴 기간 확률에 가장 크게 반영돼요."]},
+  mom: {t: "모멘텀",
+    what: "최근 20거래일(약 1달) 동안의 수익률이 평소 움직임에 비해 얼마나 강했는지를 나타내요.",
+    easy: "굴러가는 공의 속도예요. 빠르게 굴러가는 공은 한동안 그 방향으로 계속 가려는 성질이 있어요.",
+    read: ["강함: 평소보다 힘 있게 올랐어요.", "약함: 평소보다 힘 있게 내렸어요.", "보통: 뚜렷한 힘이 없어요.", "이평선과 모멘텀이 같은 방향(정배열 + 강함)이면 신호가 탄탄한 편이에요."]},
+  rsi: {t: "RSI (상대강도지수)",
+    what: "최근 14거래일 동안 오른 날의 상승 폭과 내린 날의 하락 폭을 비교해 0~100 사이 숫자로 만든 지표예요.",
+    easy: "체력 게이지예요. 너무 많이 달리면(70 이상) 숨이 차서 쉬어가고, 너무 오래 쉬면(30 이하) 다시 달릴 힘이 생겨요.",
+    read: ["70 이상 '과열': 단기간에 많이 올라서 잠깐 쉬거나 조정이 올 수 있어요.", "30 이하 '침체': 단기간에 많이 내려서 반등 여지가 있어요.", "30~70 '보통': 특별한 신호가 없어요.", "강한 상승장에서는 과열이 오래 이어지기도 해요. RSI 하나만 보고 판단하지는 마세요.", "1일·1주 확률에 주로 반영돼요."]},
+  horizon: {t: "기간 탭 (1일·1주·1개월·1년)",
+    what: "얼마 뒤를 예측할지 고르는 버튼이에요. 주식시장이 열리는 날 기준으로 1일, 5일, 21일, 252일 뒤예요.",
+    easy: "내일 날씨를 묻는 것과 다음 달 계절을 묻는 것의 차이예요. 내일 날씨는 구름 하나에도 바뀌지만, 계절은 큰 흐름을 따라가요.",
+    read: ["짧은 기간일수록 뉴스와 과열 여부가, 긴 기간일수록 추세가 많이 반영돼요.", "여러 기간이 같은 방향이면 신호가 일관된 상태예요.", "1일은 하락 우위인데 1년은 상승 우위라면 '큰 흐름은 좋은데 잠깐 쉬어가는 구간'으로 이해하면 돼요.", "위의 숫자(상승 우위 몇 개, 중립 몇 개)는 지금 보고 있는 시장과 기간 기준이에요."]},
+  picks: {t: "신호 상위 종목",
+    what: "섹터별 대표 종목들 중에서, 선택한 기간 기준 상승 확률이 높은 순서로 5개를 보여줘요. 섹터 카드 아래 3종목은 그 섹터 안에서의 순위예요.",
+    easy: "'오늘 바람이 가장 순하게 부는 쪽' 목록이에요. '이걸 사세요'라는 추천 목록이 아니에요.",
+    read: ["순위보다 % 숫자를 보세요. 1위가 52%라면 '오늘은 뚜렷한 종목이 없다'는 뜻이에요.", "관심 가는 종목은 해당 섹터 카드의 칩과 범위를 같이 확인하세요.", "아래 '종목 적중률'이 55%를 꾸준히 넘기 전까지는 참고용으로만 쓰세요."]},
+  acc: {t: "적중률",
+    what: "이 프로그램이 과거에 했던 예측 중, 오를지 내릴지 방향을 맞힌 비율이에요. 매일 자동으로 채점해요.",
+    easy: "일기예보가 얼마나 잘 맞았는지 보여주는 성적표예요. 이 화면 전체를 얼마나 믿어도 될지 알려줘요.",
+    read: ["20건이 쌓이기 전에는 '기록 쌓는 중'으로 나와요.", "50% 근처: 동전 던지기와 다를 게 없어요. 아직은 재미로만 보세요.", "55% 이상이 몇 달 유지되면 그때부터 의미 있는 신호로 볼 만해요.", "기간별로 다르게 나오면 잘 맞는 기간의 탭을 위주로 보면 돼요."]}
+};
+const GLOSS_ORDER = ["prob", "range", "price", "horizon", "trend", "mom", "rsi", "news", "picks", "acc", "vix", "fx", "rate"];
+
+function glossBody(g){
+  return `<h4>무슨 뜻이에요?</h4><p>${g.what}</p><h4>쉽게 말하면</h4><p>${g.easy}</p><h4>이렇게 보세요</h4><ul>${g.read.map(x => `<li>${x}</li>`).join("")}</ul>`;
+}
+const sheet = document.getElementById("sheet");
+function openTerm(k){
+  const g = GLOSS[k]; if (!g) return;
+  document.getElementById("sheetTitle").textContent = g.t;
+  document.getElementById("sheetBody").innerHTML = glossBody(g);
+  if (sheet.showModal) sheet.showModal(); else sheet.setAttribute("open", "");
+}
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-term]");
+  if (t && t.dataset.term && !e.target.closest(".star")) { e.preventDefault(); openTerm(t.dataset.term); }
+});
+document.addEventListener("keydown", e => {
+  const t = e.target.closest && e.target.closest("[data-term][tabindex]");
+  if (t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openTerm(t.dataset.term); }
+});
+document.getElementById("sheetClose").addEventListener("click", () => sheet.close ? sheet.close() : sheet.removeAttribute("open"));
+sheet.addEventListener("click", e => { if (e.target === sheet) sheet.close(); });
+document.getElementById("gloss").innerHTML = GLOSS_ORDER.map(k =>
+  `<details><summary>${GLOSS[k].t}</summary><div class="gb">${glossBody(GLOSS[k])}</div></details>`).join("");
 
 render();
 </script>
