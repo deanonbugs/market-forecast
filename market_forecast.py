@@ -44,6 +44,16 @@ def load_assets():
     return [tuple(x.strip() for x in r[:5]) for r in rows[1:] if len(r) >= 5]
 
 
+def load_stocks():
+    import csv
+    p = BASE / "stocks.csv"
+    if not p.exists():
+        return []
+    with open(p, encoding="utf-8-sig") as f:
+        rows = [r for r in csv.reader(f) if r and not r[0].lstrip().startswith("#")]
+    return [tuple(x.strip() for x in r[:5]) for r in rows[1:] if len(r) >= 5]
+
+
 MACRO = [("VIX 공포지수", "^VIX"), ("원/달러", "KRW=X"), ("미 10년물 금리", "^TNX")]
 
 # 기간(거래일) 과 기간별 신호 가중치: 짧을수록 뉴스·과열, 길수록 추세 비중↑
@@ -188,10 +198,10 @@ def load_history():
         return []
 
 
-def score_history(hist, prices):
+def score_history(hist, prices, only):
     stats = {k: {"n": 0, "hit": 0} for k in ("day", "week", "month")}
     for rec in hist:
-        if rec["h"] not in stats or rec["ticker"] not in prices:
+        if rec["h"] not in stats or rec["ticker"] not in prices or rec["ticker"] not in only:
             continue
         dates, c = prices[rec["ticker"]]
         if rec["base_date"] not in dates:
@@ -256,6 +266,16 @@ def main():
         except Exception as e:
             print(f"  [건너뜀] {e}")
 
+    STOCKS = load_stocks()
+    for mk, sec, name, tk, q in STOCKS:
+        print(f"종목: {name} ({tk})")
+        try:
+            prices[tk] = get_prices(tk)
+            news[tk] = ([{"title": t.format(n=name), "link": ""} for t in DEMO_NEWS[:2]]
+                        if args.demo else fetch_news(q, mk, limit=5))
+        except Exception as e:
+            print(f"  [건너뜀] {e}")
+
     ai = None if args.demo else claude_sentiment(news)
     results = []
     for mk, grp, name, tk, q in ASSETS:
@@ -274,6 +294,23 @@ def main():
                  news=news.get(tk, [])[:6], summary=summary)
         results.append(a)
 
+    stocks = []
+    for mk, sec, name, tk, q in STOCKS:
+        dates, c = prices.get(tk, ([], []))
+        if len(c) < 130:
+            print(f"  [건너뜀] {name}: 데이터 부족")
+            continue
+        if ai and tk in ai:
+            score = max(-1.0, min(1.0, float(ai[tk].get("score", 0))))
+            summary = ai[tk].get("summary", "")
+        else:
+            score, summary = lexicon_score([n["title"] for n in news.get(tk, [])]), ""
+        a = analyze(c, score)
+        a.pop("spark")
+        a.update(market=mk, sector=sec, name=name, ticker=tk, base_date=dates[-1],
+                 news=news.get(tk, [])[:3], summary=summary)
+        stocks.append(a)
+
     macro = []
     for name, tk in MACRO:
         try:
@@ -285,9 +322,10 @@ def main():
             print(f"  [매크로 건너뜀] {name}: {e}")
 
     hist = [] if args.demo else load_history()
-    accuracy = score_history(hist, prices)
+    accuracy = score_history(hist, prices, {a["ticker"] for a in results})
+    stock_accuracy = score_history(hist, prices, {s["ticker"] for s in stocks})
     if not args.demo:
-        HISTORY.write_text(json.dumps(append_history(hist, results), ensure_ascii=False),
+        HISTORY.write_text(json.dumps(append_history(hist, results + stocks), ensure_ascii=False),
                            encoding="utf-8")
 
     now = dt.datetime.now(ZoneInfo("Asia/Seoul"))
@@ -298,6 +336,7 @@ def main():
         "demo": args.demo,
         "sentiment": "claude" if ai else "keyword",
         "macro": macro, "assets": results, "accuracy": accuracy,
+        "stocks": stocks, "stock_accuracy": stock_accuracy,
     }
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
