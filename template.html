@@ -110,6 +110,17 @@ details[open] summary::before{content:"뉴스 접기 ▴"}
 .up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--flat)}
 .bg-up{background:var(--up)} .bg-down{background:var(--down)} .bg-flat{background:var(--flat)}
 
+.picks{background:var(--panel); border-radius:14px; overflow:hidden}
+.pick{display:flex; align-items:center; gap:10px; padding:11px 16px; border-top:1px solid var(--line)}
+.pick:first-child{border-top:0}
+.pick .rank{width:18px; color:var(--sub); font-weight:700; font-size:13px}
+.pick .nm{font-weight:700}
+.pick .sec{font-size:12px; color:var(--sub)}
+.pick .pp{margin-left:auto; text-align:right; font-weight:800; font-size:17px}
+.pick .pp small{display:block; font-size:12px; font-weight:500; color:var(--sub)}
+.sub{margin-top:10px; border-top:1px dashed var(--line); padding-top:8px}
+.sub div{display:flex; justify-content:space-between; font-size:13px; padding:2px 0}
+.sub span:first-child{color:var(--sub)}
 .acc{background:var(--panel); border-radius:14px; padding:14px 16px}
 .acc .r{display:flex; justify-content:space-between; padding:6px 0; border-top:1px solid var(--line)}
 .acc .r:first-of-type{border-top:0}
@@ -150,7 +161,7 @@ footer{font-size:12px; color:var(--sub); margin-top:24px; line-height:1.6}
 
   <footer>
     상승 확률은 과거 변동성·추세·뉴스 심리를 합친 통계적 추정이며, 범위는 약 68% 확률 구간입니다.
-    투자 권유가 아니며 실제 결과와 크게 다를 수 있습니다.
+    신호 상위 종목을 포함해 투자 권유가 아니며 실제 결과와 크게 다를 수 있습니다.
   </footer>
 </div>
 
@@ -194,6 +205,14 @@ function newsBlock(a){
   return `<details><summary></summary>${a.summary ? `<p class="ai">${esc(a.summary)}</p>` : ""}<ul class="news">${li}</ul></details>`;
 }
 
+function sectorPicks(a){
+  if (a.group !== "섹터") return "";
+  const s = (D.stocks || []).filter(x => x.market === a.market && x.sector === a.name)
+    .sort((x,y) => y.forecast[hz].p_up - x.forecast[hz].p_up).slice(0, 3);
+  if (!s.length) return "";
+  return `<div class="sub">${s.map(x => `<div><span>${esc(x.name)}</span><span class="${verdict(x.forecast[hz].p_up)[1]}">${Math.round(x.forecast[hz].p_up*100)}%</span></div>`).join("")}</div>`;
+}
+
 function row(a){
   const f = a.forecast[hz], p = f.p_up, [label, cls] = verdict(p);
   const off = (p - .5) * 100;                       // 50% 기준에서 얼마나 기울었나
@@ -212,6 +231,7 @@ function row(a){
       </div>
       ${spark(a.spark)}
     </div>
+    ${sectorPicks(a)}
     <div class="sig">${signals(a.signals, a.rsi)}</div>
     ${newsBlock(a)}
   </div>`;
@@ -222,6 +242,11 @@ function render(){
   const list = favOnly ? all.filter(a => favs.has(key(a))) : all;
   const groups = ["지수","섹터"];
   let html = "";
+  const picks = (D.stocks || []).filter(s => s.market === mk).sort((x,y) => y.forecast[hz].p_up - x.forecast[hz].p_up).slice(0, 5);
+  if (picks.length) html += `<h2>신호 상위 종목</h2><div class="picks">${picks.map((s,i) => {
+    const f = s.forecast[hz], c = verdict(f.p_up)[1];
+    return `<div class="pick"><span class="rank">${i+1}</span><div><div class="nm">${esc(s.name)}</div><div class="sec">${esc(s.sector)}　${num(s.last)} <span class="${tone(s.chg1d)}">${pct(s.chg1d,2)}</span></div></div><div class="pp ${c}">${Math.round(f.p_up*100)}%<small>예상 ${pct(f.exp)}</small></div></div>`;
+  }).join("")}</div>`;
   for (const g of groups){
     const items = list.filter(a => a.group === g).sort((x,y) => (favs.has(key(y)) - favs.has(key(x))) || (y.forecast[hz].p_up - x.forecast[hz].p_up));
     if (items.length) html += `<h2>${g}</h2><div class="list">${items.map(row).join("")}</div>`;
@@ -301,7 +326,9 @@ const names = {day:"다음 거래일", week:"1주", month:"1개월"};
 document.getElementById("acc").innerHTML = Object.entries(names).map(([k,n]) => {
   const s = D.accuracy[k] || {n:0, hit:0};
   const v = s.n >= 20 ? `<b>${Math.round(s.hit/s.n*100)}%</b> (${s.n}건)` : `기록 쌓는 중 (${s.n}건)`;
-  return `<div class="r"><span>${n}</span><span>${v}</span></div>`;
+  const t = (D.stock_accuracy || {})[k] || {n:0, hit:0};
+  const v2 = t.n >= 20 ? `<b>${Math.round(t.hit/t.n*100)}%</b> (${t.n}건)` : `기록 쌓는 중 (${t.n}건)`;
+  return `<div class="r"><span>${n} 지수·섹터</span><span>${v}</span></div><div class="r"><span>${n} 종목</span><span>${v2}</span></div>`;
 }).join("") + `<p>방향(오름/내림)을 맞힌 비율입니다. 50% 근처면 동전 던지기 수준이니, 55%를 꾸준히 넘는지 지켜보세요.</p>`;
 
 render();
