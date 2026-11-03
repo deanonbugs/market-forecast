@@ -1,0 +1,55 @@
+시장,섹터,종목명,티커,뉴스검색어
+# 섹터 이름은 assets.csv의 섹터 이름과 같아야 함
+KR,반도체,삼성전자,005930.KS,삼성전자 주가
+KR,반도체,SK하이닉스,000660.KS,SK하이닉스 주가
+KR,반도체,한미반도체,042700.KS,한미반도체 주가
+KR,반도체,DB하이텍,000990.KS,DB하이텍 주가
+KR,반도체,리노공업,058470.KQ,리노공업 주가
+KR,2차전지,LG에너지솔루션,373220.KS,LG에너지솔루션 주가
+KR,2차전지,삼성SDI,006400.KS,삼성SDI 주가
+KR,2차전지,에코프로비엠,247540.KQ,에코프로비엠 주가
+KR,2차전지,포스코퓨처엠,003670.KS,포스코퓨처엠 주가
+KR,2차전지,에코프로,086520.KQ,에코프로 주가
+KR,자동차,현대차,005380.KS,현대차 주가
+KR,자동차,기아,000270.KS,기아 주가
+KR,자동차,현대모비스,012330.KS,현대모비스 주가
+KR,자동차,HL만도,204320.KS,HL만도 주가
+KR,자동차,현대위아,011210.KS,현대위아 주가
+KR,은행,KB금융,105560.KS,KB금융 주가
+KR,은행,신한지주,055550.KS,신한지주 주가
+KR,은행,하나금융지주,086790.KS,하나금융지주 주가
+KR,은행,우리금융지주,316140.KS,우리금융지주 주가
+KR,은행,기업은행,024110.KS,기업은행 주가
+KR,헬스케어,삼성바이오로직스,207940.KS,삼성바이오로직스 주가
+KR,헬스케어,셀트리온,068270.KS,셀트리온 주가
+KR,헬스케어,유한양행,000100.KS,유한양행 주가
+KR,헬스케어,알테오젠,196170.KQ,알테오젠 주가
+KR,헬스케어,한미약품,128940.KS,한미약품 주가
+US,반도체,엔비디아,NVDA,Nvidia stock
+US,반도체,브로드컴,AVGO,Broadcom stock
+US,반도체,AMD,AMD,AMD stock
+US,반도체,TSMC,TSM,TSMC stock
+US,반도체,마이크론,MU,Micron stock
+US,2차전지·리튬,앨버말,ALB,Albemarle stock
+US,2차전지·리튬,SQM,SQM,SQM lithium stock
+US,2차전지·리튬,테슬라,TSLA,Tesla stock
+US,기술,애플,AAPL,Apple stock
+US,기술,마이크로소프트,MSFT,Microsoft stock
+US,기술,알파벳,GOOGL,Alphabet Google stock
+US,기술,메타,META,Meta Platforms stock
+US,기술,아마존,AMZN,Amazon stock
+US,금융,JP모건,JPM,JPMorgan stock
+US,금융,뱅크오브아메리카,BAC,Bank of America stock
+US,금융,골드만삭스,GS,Goldman Sachs stock
+US,금융,모건스탠리,MS,Morgan Stanley stock
+US,금융,비자,V,Visa stock
+US,헬스케어,일라이릴리,LLY,Eli Lilly stock
+US,헬스케어,유나이티드헬스,UNH,UnitedHealth stock
+US,헬스케어,존슨앤드존슨,JNJ,Johnson & Johnson stock
+US,헬스케어,애브비,ABBV,AbbVie stock
+US,헬스케어,머크,MRK,Merck stock
+US,에너지,엑슨모빌,XOM,Exxon Mobil stock
+US,에너지,셰브론,CVX,Chevron stock
+US,에너지,코노코필립스,COP,ConocoPhillips stock
+US,에너지,슐럼버거,SLB,SLB Schlumberger stock
+US,에너지,EOG 리소시스,EOG,EOG Resources stock
