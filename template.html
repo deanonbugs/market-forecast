@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>시장 전망</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="시장 전망">
+<meta name="theme-color" content="#eef1f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#11151b" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#18202b; --sub:#5d6876; --line:#dde2e8;
+  --up:#d42e27; --down:#1f5fd1; --flat:#8b95a3; --track:#e6eaef; --focus:#1f5fd1;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#11151b; --panel:#191f27; --ink:#e7ebf0; --sub:#93a0b0; --line:#28303b;
+    --up:#ff5b52; --down:#5c95ff; --flat:#7b8696; --track:#262e39; --focus:#5c95ff;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  font-size:15px; line-height:1.5; font-variant-numeric:tabular-nums;
+  padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);
+}
+body::before{content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0); background:var(--bg); z-index:10}
+button{-webkit-tap-highlight-color:transparent; touch-action:manipulation}
+.tools{display:flex; gap:8px; margin-top:12px}
+.tools button,.tools a{flex:1; min-height:40px; display:flex; align-items:center; justify-content:center;
+  border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:10px;
+  font:inherit; font-size:14px; font-weight:600; text-decoration:none; cursor:pointer}
+.stale{margin-top:12px; padding:10px 12px; border-radius:10px; font-size:13px;
+  background:color-mix(in srgb,var(--up) 12%,var(--panel)); color:var(--ink)}
+.star{border:0; background:none; font-size:20px; line-height:1; padding:6px; margin:-6px -6px -6px 0;
+  color:var(--line); cursor:pointer; min-width:36px; min-height:36px}
+.star[aria-pressed=true]{color:#e8a10e}
+.hz button.fav{flex:0 0 auto; padding:6px 12px}
+.wrap{max-width:560px; margin:0 auto; padding:20px 16px 40px}
+h1{font-size:26px; font-weight:800; letter-spacing:-.02em; margin:0}
+.meta{color:var(--sub); font-size:13px; margin-top:4px}
+.demo{display:inline-block; margin-left:6px; padding:1px 7px; border-radius:6px;
+  background:var(--up); color:#fff; font-size:12px; font-weight:700}
+
+.macro{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; margin:18px 0 0;
+  background:var(--line); border-radius:12px; overflow:hidden}
+.macro div{background:var(--panel); padding:10px 12px}
+.macro small{display:block; color:var(--sub); font-size:12px}
+.macro b{font-size:16px}
+.macro i{font-style:normal; font-size:12px; margin-left:4px}
+
+.controls{position:sticky; top:env(safe-area-inset-top,0); z-index:5; background:var(--bg);
+  padding:14px 0 10px; margin-top:6px}
+.seg{display:flex; background:var(--track); border-radius:10px; padding:3px}
+.seg button{flex:1; min-height:40px; border:0; background:none; color:var(--sub); font:inherit;
+  font-weight:700; padding:8px 0; border-radius:8px; cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--panel); color:var(--ink);
+  box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.hz{display:flex; gap:6px; margin-top:8px}
+.hz button{flex:1; min-height:36px; border:1px solid var(--line); background:var(--panel); color:var(--sub);
+  font:inherit; font-size:14px; padding:6px 0; border-radius:999px; cursor:pointer}
+.hz button[aria-pressed=true]{border-color:var(--ink); color:var(--ink); font-weight:700}
+button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+
+.tally{font-size:14px; color:var(--sub); margin:6px 2px 0}
+.tally b{color:var(--ink)}
+
+h2{font-size:14px; font-weight:700; color:var(--sub); margin:22px 2px 8px}
+.list{background:var(--panel); border-radius:14px; overflow:hidden}
+.row{padding:14px 16px; border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.top{display:flex; align-items:baseline; gap:8px}
+.name{font-weight:800; font-size:17px}
+.price{margin-left:auto; text-align:right; font-size:13px; color:var(--sub)}
+.price b{color:var(--ink); font-size:14px; margin-right:4px}
+
+.verdict{display:flex; align-items:center; gap:10px; margin-top:10px}
+.prob{font-size:28px; font-weight:800; letter-spacing:-.03em; line-height:1; min-width:70px}
+.prob small{display:block; font-size:12px; font-weight:600; letter-spacing:0; margin-top:4px}
+.gauge{flex:1}
+.track{position:relative; height:8px; border-radius:4px; background:var(--track)}
+.track::after{content:""; position:absolute; left:50%; top:-3px; width:1px; height:14px; background:var(--sub); opacity:.5}
+.fill{position:absolute; top:0; height:100%; border-radius:4px}
+.range{display:flex; justify-content:space-between; gap:6px; white-space:nowrap; font-size:12px; color:var(--sub); margin-top:6px}
+.range b{color:var(--ink); font-weight:700}
+.spark{flex:none}
+
+.sig{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px}
+.sig span{font-size:12px; padding:2px 8px; border-radius:6px; background:var(--track); color:var(--sub)}
+details{margin-top:8px}
+summary{cursor:pointer; font-size:13px; color:var(--sub); list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"뉴스 보기 ▾"}
+details[open] summary::before{content:"뉴스 접기 ▴"}
+.ai{font-size:14px; margin:6px 0 4px}
+.news{margin:6px 0 0; padding-left:18px; font-size:13px; color:var(--sub)}
+.news li{margin:3px 0}
+.news a{color:inherit}
+
+.up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--flat)}
+.bg-up{background:var(--up)} .bg-down{background:var(--down)} .bg-flat{background:var(--flat)}
+
+.acc{background:var(--panel); border-radius:14px; padding:14px 16px}
+.acc .r{display:flex; justify-content:space-between; padding:6px 0; border-top:1px solid var(--line)}
+.acc .r:first-of-type{border-top:0}
+.acc p{font-size:13px; color:var(--sub); margin:8px 0 0}
+footer{font-size:12px; color:var(--sub); margin-top:24px; line-height:1.6}
+.empty{padding:24px 16px; color:var(--sub); text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>시장 전망</h1>
+    <div class="meta" id="meta"></div>
+    <div class="macro" id="macro"></div>
+    <div id="stale"></div>
+    <div class="tools" id="tools"></div>
+  </header>
+
+  <div class="controls">
+    <div class="seg" id="mk">
+      <button data-v="KR" aria-pressed="true">국장</button>
+      <button data-v="US" aria-pressed="false">미장</button>
+    </div>
+    <div class="hz" id="hz">
+      <button data-v="day" aria-pressed="true">1일</button>
+      <button data-v="week" aria-pressed="false">1주</button>
+      <button data-v="month" aria-pressed="false">1개월</button>
+      <button data-v="year" aria-pressed="false">1년</button>
+      <button class="fav" id="favOnly" aria-pressed="false" aria-label="관심만 보기">★</button>
+    </div>
+    <div class="tally" id="tally"></div>
+  </div>
+
+  <main id="main"></main>
+
+  <h2>지금까지 예측 적중률</h2>
+  <section class="acc" id="acc"></section>
+
+  <footer>
+    상승 확률은 과거 변동성·추세·뉴스 심리를 합친 통계적 추정이며, 범위는 약 68% 확률 구간입니다.
+    투자 권유가 아니며 실제 결과와 크게 다를 수 있습니다.
+  </footer>
+</div>
+
+<script>
+const D = __DATA__;
+const store = {
+  get(k, d){ try { const v = localStorage.getItem("mf:" + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v){ try { localStorage.setItem("mf:" + k, JSON.stringify(v)); } catch {} }
+};
+let mk = store.get("mk", "KR"), hz = store.get("hz", "day"), favOnly = store.get("favOnly", false);
+const favs = new Set(store.get("favs", []));
+const key = a => a.market + ":" + a.ticker;
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pct = (x, d = 1) => (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x * 100).toFixed(d) + "%";
+const tone = x => x > 0.0005 ? "up" : x < -0.0005 ? "down" : "flat";
+const num = x => x.toLocaleString("ko-KR", {maximumFractionDigits: x < 100 ? 2 : 0});
+const verdict = p => p >= .55 ? ["상승 우위","up"] : p <= .45 ? ["하락 우위","down"] : ["중립","flat"];
+
+function spark(a){
+  const w = 64, h = 32, mn = Math.min(...a), mx = Math.max(...a), r = (mx - mn) || 1;
+  const pts = a.map((v,i) => (i/(a.length-1)*w).toFixed(1) + "," + (h - (v-mn)/r*(h-2) - 1).toFixed(1)).join(" ");
+  const c = a[a.length-1] >= a[0] ? "var(--up)" : "var(--down)";
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="최근 60거래일 추이"><polyline points="${pts}" fill="none" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+}
+
+function signals(s, rsi){
+  const t = s.trend >= .99 ? "정배열" : s.trend <= -.99 ? "역배열" : "혼조";
+  const r = rsi >= 70 ? "과열" : rsi <= 30 ? "침체" : "보통";
+  const n = s.news > .15 ? "긍정" : s.news < -.15 ? "부정" : "중립";
+  const m = s.mom > .3 ? "강함" : s.mom < -.3 ? "약함" : "보통";
+  return `<span>뉴스 ${n}</span><span>이평선 ${t}</span><span>모멘텀 ${m}</span><span>RSI ${rsi} ${r}</span>`;
+}
+
+function newsBlock(a){
+  if (!a.news.length && !a.summary) return "";
+  const li = a.news.map(n => {
+    const safe = /^https?:\/\//.test(n.link) ? n.link : "";
+    return `<li>${safe ? `<a href="${esc(safe)}" target="_blank" rel="noopener">${esc(n.title)}</a>` : esc(n.title)}</li>`;
+  }).join("");
+  return `<details><summary></summary>${a.summary ? `<p class="ai">${esc(a.summary)}</p>` : ""}<ul class="news">${li}</ul></details>`;
+}
+
+function row(a){
+  const f = a.forecast[hz], p = f.p_up, [label, cls] = verdict(p);
+  const off = (p - .5) * 100;                       // 50% 기준에서 얼마나 기울었나
+  const left = off >= 0 ? 50 : 50 + off, width = Math.max(Math.abs(off), 1);
+  return `<div class="row">
+    <div class="top">
+      <button class="star" data-k="${esc(key(a))}" aria-pressed="${favs.has(key(a))}" aria-label="${esc(a.name)} 관심 등록">★</button>
+      <span class="name">${esc(a.name)}</span>
+      <span class="price"><b>${num(a.last)}</b><span class="${tone(a.chg1d)}">${pct(a.chg1d,2)}</span></span>
+    </div>
+    <div class="verdict">
+      <div class="prob ${cls}">${Math.round(p*100)}%<small>${label}</small></div>
+      <div class="gauge">
+        <div class="track"><div class="fill bg-${cls}" style="left:${left}%;width:${width}%"></div></div>
+        <div class="range"><span>예상 <b class="${tone(f.exp)}">${pct(f.exp)}</b></span><span>${pct(f.lo)} ~ ${pct(f.hi)}</span></div>
+      </div>
+      ${spark(a.spark)}
+    </div>
+    <div class="sig">${signals(a.signals, a.rsi)}</div>
+    ${newsBlock(a)}
+  </div>`;
+}
+
+function render(){
+  const all = D.assets.filter(a => a.market === mk);
+  const list = favOnly ? all.filter(a => favs.has(key(a))) : all;
+  const groups = ["지수","섹터"];
+  let html = "";
+  for (const g of groups){
+    const items = list.filter(a => a.group === g).sort((x,y) => (favs.has(key(y)) - favs.has(key(x))) || (y.forecast[hz].p_up - x.forecast[hz].p_up));
+    if (items.length) html += `<h2>${g}</h2><div class="list">${items.map(row).join("")}</div>`;
+  }
+  const emptyMsg = favOnly ? "관심 등록한 항목이 없습니다. ★를 눌러 등록하세요." : "이 시장의 데이터가 없습니다. 실행 로그에서 수집 오류를 확인하세요.";
+  document.getElementById("main").innerHTML = html || `<div class="list empty">${emptyMsg}</div>`;
+
+  const c = {up:0, flat:0, down:0};
+  list.forEach(a => c[verdict(a.forecast[hz].p_up)[1]]++);
+  document.getElementById("tally").innerHTML =
+    `상승 우위 <b class="up">${c.up}</b>　중립 <b>${c.flat}</b>　하락 우위 <b class="down">${c.down}</b>`;
+}
+
+function bind(id, name, get, set){
+  const box = document.getElementById(id);
+  const sync = () => box.querySelectorAll("button[data-v]").forEach(x => x.setAttribute("aria-pressed", x.dataset.v === get()));
+  box.addEventListener("click", e => {
+    const b = e.target.closest("button[data-v]"); if (!b) return;
+    set(b.dataset.v); store.set(name, b.dataset.v); sync(); render();
+  });
+  sync();
+  return sync;
+}
+const syncMk = bind("mk", "mk", () => mk, v => mk = v);
+bind("hz", "hz", () => hz, v => hz = v);
+
+const favBtn = document.getElementById("favOnly");
+favBtn.setAttribute("aria-pressed", favOnly);
+favBtn.addEventListener("click", () => {
+  favOnly = !favOnly; store.set("favOnly", favOnly); favBtn.setAttribute("aria-pressed", favOnly); render();
+});
+document.getElementById("main").addEventListener("click", e => {
+  const b = e.target.closest(".star"); if (!b) return;
+  const k = b.dataset.k;
+  favs.has(k) ? favs.delete(k) : favs.add(k);
+  store.set("favs", [...favs]); render();
+});
+
+// 좌우로 밀어서 국장/미장 전환
+let sx = 0, sy = 0;
+document.addEventListener("touchstart", e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, {passive: true});
+document.addEventListener("touchend", e => {
+  const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+  if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  const next = dx < 0 ? "US" : "KR"; if (next === mk) return;
+  mk = next; store.set("mk", mk); syncMk(); render();
+}, {passive: true});
+
+// 버튼: 새로고침 / 지금 업데이트 / 섹터 편집
+const repo = D.repo;
+document.getElementById("tools").innerHTML =
+  `<button id="reload">새로고침</button>` +
+  (repo ? `<a href="https://github.com/${esc(repo)}/actions/workflows/update.yml" target="_blank" rel="noopener">지금 업데이트</a>` +
+          `<a href="https://github.com/${esc(repo)}/edit/main/assets.csv" target="_blank" rel="noopener">섹터 편집</a>` : "");
+document.getElementById("reload").addEventListener("click", () => {
+  location.replace(location.pathname + "?t=" + Date.now());
+});
+
+// 평일인데 30시간 넘게 갱신이 없으면 알림
+(() => {
+  const gen = Date.parse(D.generated_iso || ""); if (!gen) return;
+  const now = new Date(), hrs = (now - gen) / 36e5, d = now.getDay();
+  const weekendGap = d === 0 || d === 6 || (d === 1 && now.getHours() < 9);
+  if (hrs > 30 && !weekendGap && !D.demo)
+    document.getElementById("stale").innerHTML =
+      `<div class="stale">데이터가 ${Math.floor(hrs)}시간째 갱신되지 않았어요. 지금 업데이트를 누르거나 GitHub Actions 실행 기록을 확인하세요.</div>`;
+})();
+
+document.getElementById("meta").innerHTML =
+  `${esc(D.generated)} 기준　뉴스 분석: ${D.sentiment === "claude" ? "Claude" : "키워드"}` +
+  (D.demo ? `<span class="demo">데모 데이터</span>` : "");
+
+document.getElementById("macro").innerHTML = D.macro.map(m =>
+  `<div><small>${esc(m.name)}</small><b>${num(m.value)}</b><i class="${tone(m.chg)}">${pct(m.chg)}</i></div>`).join("");
+
+const names = {day:"다음 거래일", week:"1주", month:"1개월"};
+document.getElementById("acc").innerHTML = Object.entries(names).map(([k,n]) => {
+  const s = D.accuracy[k] || {n:0, hit:0};
+  const v = s.n >= 20 ? `<b>${Math.round(s.hit/s.n*100)}%</b> (${s.n}건)` : `기록 쌓는 중 (${s.n}건)`;
+  return `<div class="r"><span>${n}</span><span>${v}</span></div>`;
+}).join("") + `<p>방향(오름/내림)을 맞힌 비율입니다. 50% 근처면 동전 던지기 수준이니, 55%를 꾸준히 넘는지 지켜보세요.</p>`;
+
+render();
+</script>
+</body>
+</html>

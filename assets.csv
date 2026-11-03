@@ -1,0 +1,17 @@
+시장,구분,이름,티커,뉴스검색어
+# 한 줄에 하나. 시장은 KR/US, 구분은 지수/섹터. 한국 ETF는 .KS, 코스닥 종목은 .KQ
+KR,지수,코스피,^KS11,코스피 지수
+KR,지수,코스닥,^KQ11,코스닥 지수
+KR,섹터,반도체,091160.KS,반도체 주가
+KR,섹터,2차전지,305540.KS,2차전지 주가
+KR,섹터,자동차,091180.KS,자동차주 현대차 기아
+KR,섹터,은행,091170.KS,은행주 주가
+KR,섹터,헬스케어,143860.KS,바이오 헬스케어 주가
+US,지수,S&P 500,^GSPC,S&P 500 stock market
+US,지수,나스닥,^IXIC,Nasdaq stocks
+US,섹터,반도체,SOXX,semiconductor stocks
+US,섹터,2차전지·리튬,LIT,lithium battery stocks
+US,섹터,기술,XLK,big tech stocks
+US,섹터,금융,XLF,bank stocks
+US,섹터,헬스케어,XLV,healthcare stocks
+US,섹터,에너지,XLE,oil energy stocks
