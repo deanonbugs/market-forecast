@@ -180,6 +180,27 @@ def fetch_earnings(ticker):
     return d.isoformat()[:10] if hasattr(d, "isoformat") else str(d)[:10]
 
 
+def fetch_info(ticker):
+    """PER·PBR·배당 (yfinance)"""
+    import yfinance as yf
+    i = yf.Ticker(ticker).info or {}
+    price = i.get("currentPrice") or i.get("regularMarketPrice") or i.get("previousClose")
+    rate = i.get("dividendRate") or i.get("trailingAnnualDividendRate")
+    ex = i.get("exDividendDate")
+    if isinstance(ex, (int, float)):
+        ex = dt.datetime.fromtimestamp(ex, dt.timezone.utc).date().isoformat()
+    elif ex is not None:
+        ex = str(ex)[:10]
+    num = lambda v: float(v) if isinstance(v, (int, float)) and v == v else None
+    return {"per": num(i.get("trailingPE")), "pbr": num(i.get("priceToBook")),
+            "div": num(rate / price) if num(rate) and num(price) else None, "ex": ex}
+
+
+def day_offsets(ds):
+    d0 = dt.date.fromisoformat(ds[0])
+    return [(dt.date.fromisoformat(d) - d0).days for d in ds]
+
+
 # ─────────────────────────────── 뉴스 심리 ───────────────────────────────
 def lexicon_score(titles):
     total, hits = 0.0, 0
@@ -254,9 +275,10 @@ def analyze(c, news_score, flow, weights):
     sig = {"news": news_score, "rsi": -(r - 50) / 50, "mom": mom, "trend": trend,
            "flow": flow}
 
-    forecast = {}
+    forecast, scores = {}, {}
     for name, h in HORIZONS.items():
         s = sum(w * sig[k] for k, w in weights[h].items())
+        scores[name] = round(s, 3)
         sd = vol * math.sqrt(h)
         m = drift * h + TILT * s * sd
         forecast[name] = {
@@ -271,7 +293,8 @@ def analyze(c, news_score, flow, weights):
                 "year": ret(min(252, len(c) - 1))},
         "rsi": round(r, 1), "vol_year": round(vol * math.sqrt(252), 4),
         "signals": {k: round(v, 3) for k, v in sig.items()},
-        "forecast": forecast, "hist": [round(x, 2) for x in c[-252:]],
+        "forecast": forecast, "hist": [round(x, 2) for x in c[-504:]],
+        "model": {"drift": round(drift, 6), "vol": round(vol, 5), "s": scores},
     }
 
 
@@ -396,18 +419,62 @@ def build_alerts(assets, stocks, macro, events, state, today):
     return alerts, {"verdict": now}
 
 
-def send_ntfy(alerts, url):
+def send_ntfy(alerts, url, title=None):
     topic = os.environ.get("NTFY_TOPIC", "").strip()
     if not topic or not alerts:
         return
     import requests
     try:
         requests.post("https://ntfy.sh/", timeout=15, json={
-            "topic": topic, "title": f"시장 전망 알림 {len(alerts)}건",
+            "topic": topic, "title": title or f"시장 전망 알림 {len(alerts)}건",
             "message": "\n".join("· " + a for a in alerts[:12]),
             "click": url, "tags": ["chart_with_upwards_trend"]})
     except Exception as e:
         print(f"[경고] 알림 전송 실패: {e}")
+
+
+def quad_of(rs):
+    if rs["x"] >= 0:
+        return "선두" if rs["y"] >= 0 else "식는 중"
+    return "살아나는 중" if rs["y"] >= 0 else "약세"
+
+
+def build_weekly(results, stocks, hist, prices, snaps, today):
+    pick = lambda a: {"key": f"{a['market']}:{a['ticker']}", "name": a["name"],
+                      "ret": round(a["ret"]["week"], 4)}
+    ranked = sorted(results + stocks, key=lambda a: a["ret"]["week"])
+    start = (today - dt.timedelta(days=7)).isoformat()
+    n = hit = 0
+    for r in hist:
+        if r["d"] >= start:
+            up = outcome(r, 1, prices)
+            if up is not None:
+                n += 1
+                hit += int(up == (r["p"][0] > 0.5))
+    now_q = {f"{a['market']}:{a['ticker']}": quad_of(a["rs"]) for a in results if a.get("rs")}
+    names = {f"{a['market']}:{a['ticker']}": f"{a['name']}({mk_label(a['market'])})" for a in results}
+    old_days = sorted(d for d in snaps if d <= (today - dt.timedelta(days=6)).isoformat())
+    moved = []
+    if old_days:
+        old = snaps[old_days[-1]]
+        moved = [{"name": names[k], "from": old[k], "to": q}
+                 for k, q in now_q.items() if old.get(k) and old[k] != q]
+    snaps = dict(snaps)
+    snaps[today.isoformat()] = now_q
+    snaps = {d: snaps[d] for d in sorted(snaps)[-15:]}
+    weekly = {"from": (today - dt.timedelta(days=7)).strftime("%m.%d"), "to": today.strftime("%m.%d"),
+              "top": [pick(a) for a in ranked[::-1][:3]], "bottom": [pick(a) for a in ranked[:3]],
+              "acc": {"n": n, "hit": hit}, "moved": moved}
+    return weekly, snaps
+
+
+def weekly_text(w):
+    lines = ["오른 것: " + ", ".join(f"{x['name']} {x['ret'] * 100:+.1f}%" for x in w["top"]),
+             "내린 것: " + ", ".join(f"{x['name']} {x['ret'] * 100:+.1f}%" for x in w["bottom"])]
+    lines += [f"{m['name']}: {m['from']} → {m['to']}" for m in w["moved"][:4]]
+    if w["acc"]["n"]:
+        lines.append(f"1일 예측 적중률 {w['acc']['hit'] / w['acc']['n'] * 100:.0f}% ({w['acc']['n']}건)")
+    return lines
 
 
 # ──────────────────────────────── 데모 ────────────────────────────────
@@ -450,6 +517,13 @@ def demo_earnings(tk, today):
     return (today + dt.timedelta(days=rnd.randint(1, 40))).isoformat() if rnd.random() < .4 else None
 
 
+def demo_info(tk):
+    rnd = random.Random(tk + "i")
+    return {"per": round(rnd.uniform(6, 40), 1), "pbr": round(rnd.uniform(.5, 5), 2),
+            "div": round(rnd.uniform(0, .05), 4) if rnd.random() < .7 else None,
+            "ex": (dt.date.today() + dt.timedelta(days=rnd.randint(3, 60))).isoformat() if rnd.random() < .3 else None}
+
+
 # ──────────────────────────────── 실행 ────────────────────────────────
 def main():
     ap = argparse.ArgumentParser()
@@ -465,7 +539,7 @@ def main():
     universe = [("asset",) + r for r in assets_cfg] + [("stock",) + r for r in stocks_cfg]
 
     get_prices = demo_prices if demo else fetch_prices
-    prices, news, flows, earnings = {}, {}, {}, []
+    prices, news, flows, earnings, infos = {}, {}, {}, [], {}
     for kind, mk, grp, name, tk, q in universe:
         print(f"수집: {name} ({tk})")
         try:
@@ -491,6 +565,14 @@ def main():
                                  "desc": mk_label(mk), "key": f"{mk}:{tk}"})
         except Exception as e:
             print(f"  [실적일 실패] {e}")
+        try:
+            infos[tk] = demo_info(tk) if demo else fetch_info(tk)
+            ex = infos[tk].get("ex")
+            if ex and ex >= today.isoformat():
+                earnings.append({"date": ex, "kind": "배당락", "name": f"{name} 배당락일",
+                                 "desc": mk_label(mk), "key": f"{mk}:{tk}"})
+        except Exception as e:
+            print(f"  [재무 실패] {e}")
 
     ai = None if demo else claude_sentiment(news)
     hist = [] if demo else [r for r in load_json(HISTORY, []) if "t" in r and "s" in r]
@@ -511,13 +593,32 @@ def main():
         key = f"{mk}:{tk}"
         a.update(market=mk, name=name, ticker=tk, base_date=dates[-1],
                  hist_start=dates[-len(a["hist"])], summary=summary, flows=f,
+                 hd=day_offsets(dates[-len(a["hist"]):]),
                  news=news.get(tk, [])[:6 if kind == "asset" else 4],
-                 earnings=next((e["date"] for e in earnings if e["key"] == key), None))
+                 earnings=next((e["date"] for e in earnings if e["key"] == key and e["kind"] == "실적"), None))
         a["group" if kind == "asset" else "sector"] = grp
+        if tk in infos:
+            ex = infos[tk].get("ex")
+            a["div"] = {"yield": infos[tk].get("div"), "ex": ex if ex and ex >= today.isoformat() else None}
         return a
 
     results = [a for a in (build("asset", *r[:4]) for r in assets_cfg) if a]
     stocks = [a for a in (build("stock", *r[:4]) for r in stocks_cfg) if a]
+
+    def sec_median(group, k):
+        vals = [infos[s["ticker"]][k] for s in group
+                if infos.get(s["ticker"], {}).get(k) and 0 < infos[s["ticker"]][k] < 300]
+        return round(st.median(vals), 2) if vals else None
+
+    for sec in {s["sector"] for s in stocks}:
+        group = [s for s in stocks if s["sector"] == sec]
+        per_m, pbr_m = sec_median(group, "per"), sec_median(group, "pbr")
+        for s in group:
+            i = infos.get(s["ticker"])
+            if i and (i.get("per") or i.get("pbr")):
+                s["val"] = {"per": round(i["per"], 2) if i.get("per") else None,
+                            "pbr": round(i["pbr"], 2) if i.get("pbr") else None,
+                            "per_sec": per_m, "pbr_sec": pbr_m}
 
     bench = {a["ticker"]: a for a in results}
     for a in results:
@@ -526,10 +627,13 @@ def main():
             a["rs"] = {"x": round(a["ret"]["quarter"] - b["ret"]["quarter"], 4),
                        "y": round(a["ret"]["month"] - b["ret"]["month"], 4)}
 
-    macro = []
+    macro, fx = [], None
     for name, tk in MACRO:
         try:
-            _, c = get_prices(tk)
+            ds, c = get_prices(tk)
+            if tk == "KRW=X" and len(c) > 10:
+                fx = {"start": ds[-504:][0], "hd": day_offsets(ds[-504:]),
+                      "c": [round(x, 2) for x in c[-504:]]}
             if len(c) >= 2:
                 macro.append({"name": name, "value": round(c[-1], 2),
                               "chg": round(c[-1] / c[-2] - 1, 4)})
@@ -537,8 +641,10 @@ def main():
             print(f"  [매크로 건너뜀] {name}: {e}")
 
     events = build_events(today, earnings)
-    alerts, state = build_alerts(results, stocks, macro, events,
-                                 {} if demo else load_json(STATE_FILE, {}), today)
+    old_state = {} if demo else load_json(STATE_FILE, {})
+    alerts, state = build_alerts(results, stocks, macro, events, old_state, today)
+    weekly, state["quad_hist"] = build_weekly(results, stocks, hist, prices,
+                                              old_state.get("quad_hist", {}), today)
     if demo:
         alerts = ["(데모) 반도체(국장) 하루 +5.2%", "(데모) 내일 미국 CPI 발표"]
 
@@ -550,7 +656,10 @@ def main():
         WEIGHTS_FILE.write_text(json.dumps(learn, ensure_ascii=False, indent=1), encoding="utf-8")
         STATE_FILE.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
         owner, _, name = repo.partition("/")
-        send_ntfy(alerts, f"https://{owner}.github.io/{name}/" if name else "")
+        url = f"https://{owner}.github.io/{name}/" if name else ""
+        send_ntfy(alerts, url)
+        if today.weekday() == 4 and dt.datetime.now(KST).hour >= 15:
+            send_ntfy(weekly_text(weekly), url, "이번 주 시장 정리")
 
     now = dt.datetime.now(KST)
     data = {
@@ -563,6 +672,7 @@ def main():
         "stocks": stocks, "stock_accuracy": stock_accuracy,
         "events": events, "alerts": alerts, "learn": learn,
         "diag": FLOW_DIAG[:8],
+        "weekly": weekly, "fx": fx,
     }
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
