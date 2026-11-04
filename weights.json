@@ -1,0 +1,59 @@
+{
+ "day": {
+  "n": 0,
+  "min": 200,
+  "active": false,
+  "acc": {
+   "news": null,
+   "rsi": null,
+   "mom": null,
+   "trend": null,
+   "flow": null
+  },
+  "weights": {
+   "news": 0.35,
+   "rsi": 0.25,
+   "mom": 0.2,
+   "trend": 0.1,
+   "flow": 0.1
+  }
+ },
+ "week": {
+  "n": 0,
+  "min": 200,
+  "active": false,
+  "acc": {
+   "news": null,
+   "rsi": null,
+   "mom": null,
+   "trend": null,
+   "flow": null
+  },
+  "weights": {
+   "news": 0.25,
+   "rsi": 0.2,
+   "mom": 0.25,
+   "trend": 0.2,
+   "flow": 0.1
+  }
+ },
+ "month": {
+  "n": 0,
+  "min": 200,
+  "active": false,
+  "acc": {
+   "news": null,
+   "rsi": null,
+   "mom": null,
+   "trend": null,
+   "flow": null
+  },
+  "weights": {
+   "news": 0.15,
+   "rsi": 0.1,
+   "mom": 0.3,
+   "trend": 0.4,
+   "flow": 0.05
+  }
+ }
+}
