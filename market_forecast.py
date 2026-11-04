@@ -99,15 +99,49 @@ def fetch_news(query, market, limit=8):
             for e in feed.entries[:limit]]
 
 
+FLOW_DIAG = []
+
+
+def _num(v):
+    return int(str(v).replace(",", "").replace("+", "").strip() or 0)
+
+
 def fetch_flows(ticker):
-    """네이버 금융: 최근 5거래일 외국인·기관 순매매량 (국장 종목만)"""
+    """네이버 증권: 최근 5거래일 외국인·기관 순매매량 (국장 종목만)"""
     if not ticker.endswith((".KS", ".KQ")):
         return None
     import requests
     code = ticker.split(".")[0]
+    try:
+        r = requests.get(f"https://m.stock.naver.com/api/stock/{code}/trend",
+                         headers=UA, timeout=15)
+        FLOW_DIAG.append(f"api {code} {r.status_code} {len(r.content)}")
+        rows = r.json() if r.ok else []
+        if isinstance(rows, dict):
+            rows = next((v for v in rows.values() if isinstance(v, list)), [])
+        out = []
+        for row in rows:
+            fk = next((k for k in row if "foreign" in k.lower() and "pure" in k.lower()), None)
+            ok = next((k for k in row if "organ" in k.lower() and "pure" in k.lower()), None)
+            dk = next((k for k in row if "date" in k.lower()), None)
+            if fk and ok and dk:
+                d = str(row[dk]).replace("-", "").replace(".", "")
+                out.append((f"{d[:4]}.{d[4:6]}.{d[6:8]}", _num(row[ok]), _num(row[fk])))
+        if len(out) >= 5:
+            out = sorted(out, reverse=True)[:5]
+            return {"dates": [o[0] for o in out], "inst": [o[1] for o in out],
+                    "frgn": [o[2] for o in out]}
+        if rows:
+            FLOW_DIAG.append(f"api keys {list(rows[0])[:12]}")
+    except Exception as e:
+        FLOW_DIAG.append(f"api {code} err {e}")
     r = requests.get(f"https://finance.naver.com/item/frgn.naver?code={code}",
                      headers=UA, timeout=15)
-    return parse_flows(r.content.decode("euc-kr", errors="ignore"))
+    html = r.content.decode("euc-kr", errors="ignore")
+    f = parse_flows(html)
+    if not f:
+        FLOW_DIAG.append(f"html {code} {r.status_code} {len(html)} tr={html.count('<tr')} {html[:120]!r}")
+    return f
 
 
 def parse_flows(html):
@@ -452,7 +486,7 @@ def main():
             print(f"  [수급 실패] {e}")
         try:
             d = demo_earnings(tk, today) if demo else fetch_earnings(tk)
-            if d:
+            if d and d >= today.isoformat():
                 earnings.append({"date": d, "kind": "실적", "name": f"{name} 실적 발표",
                                  "desc": mk_label(mk), "key": f"{mk}:{tk}"})
         except Exception as e:
@@ -528,6 +562,7 @@ def main():
         "macro": macro, "assets": results, "accuracy": accuracy,
         "stocks": stocks, "stock_accuracy": stock_accuracy,
         "events": events, "alerts": alerts, "learn": learn,
+        "diag": FLOW_DIAG[:8],
     }
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
