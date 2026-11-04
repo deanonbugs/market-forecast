@@ -3,6 +3,7 @@ name: 시장 전망 업데이트
 on:
   schedule:
     - cron: "0 22 * * 0-4"   # 한국시간 월~금 오전 7시
+    - cron: "30 7 * * 1-5"   # 한국시간 월~금 오후 4시 30분 (국장 마감 후)
   workflow_dispatch:          # 아이폰에서 수동 실행
 
 permissions:
