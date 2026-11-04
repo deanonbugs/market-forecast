@@ -5,9 +5,9 @@
   "active": false,
   "acc": {
    "news": null,
-   "rsi": 0.571,
-   "mom": 0.462,
-   "trend": 0.53,
+   "rsi": 0.821,
+   "mom": 0.185,
+   "trend": 0.288,
    "flow": null
   },
   "weights": {
