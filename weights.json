@@ -1,13 +1,13 @@
 {
  "day": {
-  "n": 136,
+  "n": 135,
   "min": 200,
   "active": false,
   "acc": {
-   "news": 0.551,
-   "rsi": 0.655,
-   "mom": 0.338,
-   "trend": 0.404,
+   "news": 0.545,
+   "rsi": 0.661,
+   "mom": 0.333,
+   "trend": 0.4,
    "flow": null
   },
   "weights": {
