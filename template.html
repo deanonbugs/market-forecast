@@ -203,6 +203,10 @@ dialog#sheet::backdrop{background:rgba(0,0,0,.4)}
 .row2 > div{min-width:0}
 .form input[type=date]{display:block; min-width:0; -webkit-appearance:none; appearance:none}
 .legend b{display:inline-block; width:12px; height:3px; border-radius:2px; vertical-align:middle; margin-right:6px}
+.reA{padding:14px 0 4px; border-top:1px solid var(--line); cursor:pointer}
+.ct + .reA{border-top:0; padding-top:0}
+.reP{font-size:26px; font-weight:800; letter-spacing:-.02em; margin:6px 0 2px}
+.reA .t2,.card > .t2{white-space:normal; overflow:visible}
 .small{font-size:13px; color:var(--sub)}
 .dtable{width:100%; border-collapse:collapse; font-size:14px}
 .dtable th,.dtable td{padding:8px 4px; border-top:1px solid var(--line); text-align:right}
@@ -242,12 +246,14 @@ dialog#sheet::backdrop{background:rgba(0,0,0,.4)}
   <div id="marketBody"></div>
 </section>
 <section class="view" id="v-mine" hidden></section>
+<section class="view" id="v-re" hidden></section>
 <section class="view" id="v-more" hidden></section>
 
 <nav class="tabbar" aria-label="화면 이동"><div class="in">
   <button data-tab="today"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.6 12 3.5l9 7.1V20a1 1 0 0 1-1 1h-5.5v-6h-5v6H4a1 1 0 0 1-1-1z"/></svg>오늘</button>
   <button data-tab="market"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20v-8.5h3.4V20zm6.3 0V4h3.4v16zm6.3 0v-11.5H20V20z"/></svg>시장</button>
   <button data-tab="mine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3.05A9 9 0 1 0 20.95 13H11z"/><path d="M13 2.05V11h8.95A9 9 0 0 0 13 2.05z"/></svg>내 종목</button>
+  <button data-tab="re"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V9.5l6-3.5v15zm8 0V3l10 5v13zm2.5-13h2v2h-2zm0 4h2v2h-2zm0 4h2v2h-2zm4-6h1.5v2H17.5zm0 4h1.5v2H17.5z"/></svg>부동산</button>
   <button data-tab="more"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg>더보기</button>
 </div></nav>
 
@@ -660,6 +666,73 @@ function weeklyCard(){
     <div class="sub-h">1일 예측 적중률 ${w.acc.n >= 10 ? `<b>${Math.round(w.acc.hit / w.acc.n * 100)}%</b> (${w.acc.n}건)` : `· 기록 쌓는 중 (${w.acc.n}건)`}</div></div>`;
 }
 
+// ───────── 부동산 ─────────
+const eok = v => { v = Math.round(v); const e = Math.floor(v / 10000), r = v % 10000; return (e ? e + "억" : "") + (r ? (e ? " " : "") + r.toLocaleString("ko-KR") + "만" : "") + "원"; };
+const ymLabel = ym => ym.slice(2, 4) + "." + ym.slice(4);
+const RH = [["m3", "3개월"], ["m6", "6개월"], ["m12", "1년"]];
+let reSel = null;
+function reLine(pts, bars){
+  const W = 340, H = 150, vals = pts.filter(v => v != null);
+  if (!vals.length) return "";
+  const lo = Math.min(...vals), hi = Math.max(...vals), r = (hi - lo) || 1, n = pts.length;
+  const X = i => n > 1 ? i / (n - 1) * (W - 8) + 4 : W / 2, Y = v => H - 24 - (v - lo) / r * (H - 36);
+  let d = "", on = false;
+  pts.forEach((v, i) => { if (v == null) { on = false; return; } d += (on ? "L" : "M") + X(i).toFixed(1) + "," + Y(v).toFixed(1); on = true; });
+  const bm = Math.max(...bars, 1);
+  const bs = bars.map((b, i) => `<rect x="${(X(i) - 2).toFixed(1)}" y="${(H - b / bm * 16).toFixed(1)}" width="4" height="${(b / bm * 16).toFixed(1)}" rx="1" fill="var(--faint)"/>`).join("");
+  const dot = vals.length === 1 ? `<circle cx="${X(pts.findIndex(v => v != null))}" cy="${Y(vals[0])}" r="4" fill="var(--blue)"/>` : "";
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="가격 흐름">${bs}<path d="${d}" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linejoin="round"/>${dot}</svg>`;
+}
+const reChips = fc => `<div class="chips">${RH.map(([k, n]) => `<span class="chip">${n} 상승 <b class="${verdict(fc[k].p_up)[1]}">${pp(fc[k].p_up)}</b></span>`).join("")}</div>`;
+function renderRE(){
+  const R = D.re, el = $("v-re");
+  let html = `<div class="top"><h1>부동산</h1><div class="meta">${R ? `${esc(R.updated)} 기준 · 국토교통부 실거래가` : ""}</div></div>`;
+  if (!R) { el.innerHTML = html + `<div class="card empty">apartments.csv에 단지를 등록하면 여기에 나와요.</div>`; return; }
+  if (R.error) html += `<div class="stale">실거래가를 가져오지 못했어요. ${esc(R.error)}</div>`;
+  R.apts.forEach((a, ai) => {
+    const reg = R.regions.find(r => r.code === a.code), fc = reg && reg.forecast;
+    html += `<div class="card"><div class="ct">${esc(a.name)} <button class="q" data-term="reest" aria-label="추정 시세 설명">?</button><span class="cap">${esc(a.dong)}${a.built ? ` · ${esc(a.built)}년 준공` : ""}</span></div>`;
+    if (!a.areas.length) html += `<p class="small">최근 3년 안에 '${esc(a.kw)}'가 들어간 거래를 찾지 못했어요.${a.dong_names.length ? ` 이 동의 단지 이름: ${a.dong_names.map(esc).join(", ")}.` : ""} apartments.csv의 단지키워드를 맞춰주세요.</p>`;
+    a.areas.forEach((ar, i) => {
+      html += `<div class="reA" data-re="${ai}:${i}" role="button" tabindex="0"><div class="ah"><span class="nm">전용 ${ar.area}㎡</span><span class="px">약 ${Math.round(ar.area / 3.3058)}평 · 3년 거래 ${ar.n}건</span></div>
+        <div class="reP">${eok(ar.est)}</div><div class="t2">추정 시세 · 최근 거래 ${esc(ar.last.date)} ${eok(ar.last.amt)} (${esc(ar.last.floor)}층)</div>${fc ? reChips(fc) : ""}</div>`;
+    });
+    html += `</div>`;
+  });
+  R.regions.forEach(reg => {
+    const idx = reg.index, last = [...idx].reverse().find(x => x.ppa), fc = reg.forecast, sg = reg.signals || {};
+    html += `<div class="card"><div class="ct">${esc(reg.name)} 아파트 흐름 <button class="q" data-term="reidx" aria-label="설명">?</button><span class="cap">평당 가격 중간값</span></div>`;
+    if (last) html += `<div class="reP">${eok(last.ppa * 3.3058)}</div><div class="t2">${ymLabel(last.ym)} 거래 기준${sg.ret12 != null ? ` · 1년 <span class="${tone(sg.ret12)}">${pct(sg.ret12)}</span> · 3개월 <span class="${tone(sg.ret3)}">${pct(sg.ret3)}</span>` : ""}</div>`;
+    html += reLine(idx.map(x => x.ppa ? x.ppa * 3.3058 : null), idx.map(x => x.n)) + (idx.length ? `<div class="legend"><b style="background:var(--blue)"></b>평당 가격 <b style="background:var(--faint)"></b>거래량 · ${ymLabel(idx[0].ym)} ~ ${ymLabel(idx[idx.length - 1].ym)}</div>` : "");
+    if (fc) html += `<table class="dtable" style="margin-top:12px"><tr><th>기간</th><th>상승 확률</th><th>예상</th><th>범위</th></tr>${RH.map(([k, n]) => `<tr><td>${n}</td><td class="${verdict(fc[k].p_up)[1]}"><b>${pp(fc[k].p_up)}</b></td><td class="${tone(fc[k].exp)}">${pct(fc[k].exp)}</td><td>${pct(fc[k].lo)} ~ ${pct(fc[k].hi)}</td></tr>`).join("")}</table>
+      <div class="chips"><button class="chip" data-term="news">뉴스 ${sg.news > .15 ? "긍정" : sg.news < -.15 ? "부정" : "중립"}</button><button class="chip" data-term="retrend">추세 ${sg.trend > .2 ? "상승" : sg.trend < -.2 ? "하락" : "보합"}</button><button class="chip" data-term="retrend">모멘텀 ${sg.mom > .3 ? "강함" : sg.mom < -.3 ? "약함" : "보통"}</button><button class="chip" data-term="revol">거래량 ${sg.volume > .1 ? "늘어남" : sg.volume < -.1 ? "줄어듦" : "보통"}</button></div>`;
+    else if (idx.length) html += `<p class="small">전망을 계산하려면 1년 이상의 거래 기록이 필요해요.</p>`;
+    html += `</div>`;
+    if (reg.news && reg.news.length) html += `<div class="card"><div class="ct">부동산 뉴스</div><ul class="news">${reg.news.map(x => { const u = /^https?:\/\//.test(x.link) ? x.link : ""; return `<li>${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}</li>`; }).join("")}</ul></div>`;
+  });
+  html += `<p class="hint">실거래가는 계약 후 최대 30일 안에 신고돼서 최근 한두 달은 거래가 적게 보여요. 전망은 지역 흐름 기준의 거친 참고치예요.</p>`;
+  el.innerHTML = html;
+}
+function openRE(ai, i){
+  const R = D.re, a = R.apts[ai], ar = a.areas[i], reg = R.regions.find(r => r.code === a.code), fc = reg && reg.forecast;
+  reSel = {ar, fc};
+  const tr = a.trades.filter(t => Math.round(t.area) === ar.area), s = ar.series, pre = Math.max(0, s.findIndex(x => x.ym >= String(+s[s.length - 1].ym.slice(0, 4) - 1) + s[s.length - 1].ym.slice(4)));
+  const rows = fc ? RH.map(([k, n]) => `<tr><td>${n}</td><td class="${verdict(fc[k].p_up)[1]}"><b>${pp(fc[k].p_up)}</b></td><td>${eok(ar.est * (1 + fc[k].exp))}</td><td>${eok(ar.est * (1 + fc[k].lo))} ~ ${eok(ar.est * (1 + fc[k].hi))}</td></tr>`).join("") : "";
+  openSheet(`${a.name} ${ar.area}㎡`, `<p class="small">${esc(a.region)} ${esc(a.dong)} · 약 ${Math.round(ar.area / 3.3058)}평</p>
+    <div style="font-size:28px; font-weight:800; letter-spacing:-.02em">${eok(ar.est)}</div><p class="small"><button class="term" data-term="reest">추정 시세</button> · 3년간 거래 ${ar.n}건</p>
+    <h4>월별 실거래가 (중간값)</h4>${reLine(s.map(x => x.p), s.map(x => x.n))}<div class="legend">${ymLabel(s[0].ym)} ~ ${ymLabel(s[s.length - 1].ym)} · 거래가 있었던 달만 이어서 표시</div>
+    ${fc ? `<h4><button class="term" data-term="reidx">앞으로의 예상</button></h4><table class="dtable"><tr><th>기간</th><th>상승 확률</th><th>예상</th><th>범위</th></tr>${rows}</table>` : ""}
+    <h4><button class="term" data-term="whatif">만약에 이때 샀다면</button></h4><div class="form"><select id="reBuy">${s.map((x, j) => `<option value="${x.ym}"${j === pre ? " selected" : ""}>${ymLabel(x.ym)} 거래 (${eok(x.p)})</option>`).join("")}</select></div><div id="reCalc"></div>
+    <h4><button class="term" data-term="retrade">최근 실거래</button></h4>${tr.slice(0, 12).map(t => `<div class="kv"><span>${esc(t.date)} · ${esc(t.floor)}층</span><span><b>${eok(t.amt)}</b></span></div>`).join("")}`);
+  reCalc();
+}
+function reCalc(){
+  const el = $("reCalc"), s = $("reBuy"); if (!el || !s || !reSel) return;
+  const {ar, fc} = reSel, b = ar.series.find(x => x.ym === s.value); if (!b) return;
+  const now = ar.est / b.p - 1, f = fc ? ar.est * (1 + fc.m12.exp) : null;
+  el.innerHTML = `<div class="res"><div class="line"><span>그때 가격</span><span>${eok(b.p)}</span></div><div class="line"><span>지금 추정</span><b class="${tone(now)}">${eok(ar.est)} (${pct(now)})</b></div>${f ? `<div class="line"><span>1년 뒤 예상</span><span class="${tone(f / b.p - 1)}">${eok(f)} (${pct(f / b.p - 1)})</span></div>` : ""}<p class="small" style="margin:6px 0 0">그달 거래들의 중간값 기준이에요. 취득세·중개수수료·대출 이자는 빠져 있어요.</p></div>`;
+}
+
 // ───────── 용어 풀이 ─────────
 const GLOSS = {
   vix: {t: "VIX 공포지수",
@@ -785,9 +858,29 @@ const GLOSS = {
   target: {t: "목표가 · 손절가",
     what: "이 가격이 되면 팔겠다고 미리 정해두는 가격이에요. 목표가는 이익을 챙길 가격, 손절가는 더 큰 손실을 막으려고 팔 가격이에요.",
     easy: "출발 전에 '여기까지 가면 내린다'고 정해두는 정류장이에요.",
-    read: ["현재가가 목표가 이상이면 '목표 도달', 손절가 이하면 '손절가 도달' 배지가 붙어요.", "둘 다 넣으면 막대에서 지금 가격이 손절가(왼쪽)와 목표가(오른쪽) 사이 어디쯤인지 보여줘요.", "보유 정보는 이 기기에만 있어서 푸시 알림은 오지 않아요. 앱을 열 때 확인하세요.", "종목을 눌러 상세 화면의 '보유 정보 수정'에서 언제든 바꿀 수 있어요."]}
+    read: ["현재가가 목표가 이상이면 '목표 도달', 손절가 이하면 '손절가 도달' 배지가 붙어요.", "둘 다 넣으면 막대에서 지금 가격이 손절가(왼쪽)와 목표가(오른쪽) 사이 어디쯤인지 보여줘요.", "보유 정보는 이 기기에만 있어서 푸시 알림은 오지 않아요. 앱을 열 때 확인하세요.", "종목을 눌러 상세 화면의 '보유 정보 수정'에서 언제든 바꿀 수 있어요."]},
+  reest: {t: "추정 시세 (아파트)",
+    what: "이 단지·평형의 최근 실거래 최대 5건을, 거래 이후 지역 가격이 움직인 만큼 보정해서 중간값을 낸 값이에요.",
+    easy: "'최근에 이 값에 팔렸고, 그 뒤로 동네 시세가 이만큼 움직였으니 지금은 이 정도겠다'는 계산이에요.",
+    read: ["실제 호가나 감정가가 아니라 통계적 추정이에요. 층·향·수리 상태에 따라 실제 가격은 꽤 달라요.", "거래가 드문 단지는 최근 거래가 오래돼서 오차가 커질 수 있어요.", "계약이 취소(해제)된 거래는 빼고 계산해요.", "평형을 누르면 월별 실거래가, 예상 가격, 최근 거래 목록이 나와요."]},
+  reidx: {t: "지역 아파트 흐름",
+    what: "이 구에서 거래된 모든 아파트의 3.3㎡(1평)당 가격 중간값을 매달 계산해 이은 선이에요. 앞으로의 예상도 이 흐름을 기준으로 계산하고, 단지 예상 가격은 추정 시세에 이 예상 변화율을 곱한 값이에요.",
+    easy: "동네 전체의 체온계예요. 한 단지만 보면 거래가 적어 들쭉날쭉하니, 동네 전체 흐름을 같이 봐요.",
+    read: ["상승 확률은 주식과 같은 방식이에요. 55% 이상이면 상승 우위, 45% 이하면 하락 우위예요.", "부동산은 정책·대출 규제·공급 물량 영향이 커서 주식보다 예측이 더 거칠어요. 방향 정도만 참고하세요.", "과거 추세는 절반만 반영하고 변동 폭은 넉넉하게 잡아서, 과하게 확신하지 않도록 만들었어요.", "이번 달은 신고가 다 들어오지 않아서 예측 계산에서는 빼요."]},
+  retrend: {t: "추세 · 모멘텀 (부동산)",
+    what: "추세는 최근 3개월 평균 가격이 최근 1년 평균보다 높은지, 모멘텀은 최근 6개월 동안 얼마나 힘 있게 움직였는지예요.",
+    easy: "집값이 '요즘 오르는 중인가'와 '얼마나 세게 오르고 있나'를 나눠서 본 거예요.",
+    read: ["둘 다 상승·강함이면 오름세가 이어지는 중이에요.", "추세는 상승인데 모멘텀이 약해지면 오름세가 꺾이는 신호일 수 있어요."]},
+  revol: {t: "거래량 (부동산)",
+    what: "최근 3개월 월평균 거래 건수를 최근 1년 평균과 비교한 거예요.",
+    easy: "가게에 손님이 늘었는지 줄었는지예요. 집값은 보통 거래가 먼저 움직이고 가격이 뒤따라요.",
+    read: ["거래가 늘면서 가격도 오르면 상승 힘이 붙는 중이에요.", "가격은 오르는데 거래가 줄면 오름세가 약해질 수 있어요.", "최근 한두 달은 신고가 늦어 실제보다 적게 보일 수 있어요."]},
+  retrade: {t: "실거래가",
+    what: "국토교통부에 신고된 실제 계약 가격이에요. 계약 후 30일 안에 신고하게 되어 있어요.",
+    easy: "광고에 붙은 '부르는 값(호가)'이 아니라 실제로 도장 찍은 값이에요.",
+    read: ["같은 단지·평형이라도 층, 향, 수리 상태에 따라 수천만 원씩 차이 나요.", "가족 간 거래처럼 시세보다 낮은 특이 거래가 섞일 수 있어요.", "계약이 취소된 거래는 빼고 보여줘요."]}
 };
-const GLOSS_ORDER = ["prob", "range", "price", "horizon", "trend", "mom", "rsi", "news", "flow", "per", "div", "map", "picks", "hold", "target", "fxk", "whatif", "compare", "weekly", "events", "fomc", "cpi", "bok", "earn", "alert", "acc", "strong", "weights", "vix", "fx", "rate"];
+const GLOSS_ORDER = ["prob", "range", "price", "horizon", "trend", "mom", "rsi", "news", "flow", "per", "div", "map", "picks", "hold", "target", "fxk", "whatif", "compare", "weekly", "reest", "reidx", "retrend", "revol", "retrade", "events", "fomc", "cpi", "bok", "earn", "alert", "acc", "strong", "weights", "vix", "fx", "rate"];
 function glossBody(g){
   return `<h4>무슨 뜻이에요?</h4><p>${g.what}</p><h4>쉽게 말하면</h4><p>${g.easy}</p><h4>이렇게 보세요</h4><ul>${g.read.map(x => `<li>${x}</li>`).join("")}</ul>`;
 }
@@ -796,8 +889,8 @@ function openTerm(k){ const g = GLOSS[k]; if (g) openSheet(g.t, glossBody(g)); }
 // ───────── 탭 · 이벤트 ─────────
 function renderAll(){ renderToday(); renderMarket(); renderMine(); }
 function setTab(t){
-  tab = ["today", "market", "mine", "more"].includes(t) ? t : "today"; store.set("tab", tab);
-  ["today", "market", "mine", "more"].forEach(v => $("v-" + v).hidden = v !== tab);
+  tab = ["today", "market", "mine", "re", "more"].includes(t) ? t : "today"; store.set("tab", tab);
+  ["today", "market", "mine", "re", "more"].forEach(v => $("v-" + v).hidden = v !== tab);
   document.querySelectorAll(".tabbar button").forEach(b => b.dataset.tab === tab ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
   window.scrollTo(0, 0);
 }
@@ -816,6 +909,7 @@ document.addEventListener("click", e => {
     if (confirm(`${a ? a.name : "이 종목"}을(를) 목록에서 지울까요?`)) { holds.splice(+el.dataset.del, 1); store.set("hold", holds); renderMine(); }
     return;
   }
+  if ((el = T("[data-re]"))) { const [x, y] = el.dataset.re.split(":").map(Number); openRE(x, y); return; }
   if ((el = T("[data-detail]"))) { openDetail(el.dataset.detail); return; }
   if (T("#addHold")) { holdForm(); return; }
   if ((el = T("#hsave"))) {
@@ -849,6 +943,7 @@ document.addEventListener("input", e => { if (e.target.closest && e.target.close
 document.addEventListener("change", e => {
   if (e.target.closest && e.target.closest("#whatif")) wiRead();
   else if (e.target.id === "cmpb") { cmp.b = e.target.value; drawCompare(); }
+  else if (e.target.id === "reBuy") reCalc();
 });
 $("sheet").addEventListener("close", () => { sheetStack = []; });
 $("sheet").addEventListener("click", e => { if (e.target === $("sheet")) $("sheet").close(); });
@@ -864,6 +959,7 @@ document.addEventListener("touchend", e => {
 
 renderAll();
 renderMore();
+renderRE();
 setTab(tab);
 </script>
 </body>
