@@ -664,7 +664,7 @@ def main():
     try:
         import realestate
         re_data = realestate.build(os.environ.get("DATA_GO_KR_KEY", "").strip(), fetch_news,
-                                   lexicon_score, today, demo)
+                                   lexicon_score, today, OUT_DIR, demo)
     except Exception as e:
         print(f"[경고] 부동산 실패: {e}")
         re_data = {"error": str(e)[:200], "regions": [], "apts": [], "updated": today.isoformat()}
