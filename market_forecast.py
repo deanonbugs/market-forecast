@@ -661,6 +661,14 @@ def main():
         if today.weekday() == 4 and dt.datetime.now(KST).hour >= 15:
             send_ntfy(weekly_text(weekly), url, "이번 주 시장 정리")
 
+    try:
+        import realestate
+        re_data = realestate.build(os.environ.get("DATA_GO_KR_KEY", "").strip(), fetch_news,
+                                   lexicon_score, today, demo)
+    except Exception as e:
+        print(f"[경고] 부동산 실패: {e}")
+        re_data = {"error": str(e)[:200], "regions": [], "apts": [], "updated": today.isoformat()}
+
     now = dt.datetime.now(KST)
     data = {
         "generated": now.strftime("%Y-%m-%d %H:%M"),
@@ -672,7 +680,7 @@ def main():
         "stocks": stocks, "stock_accuracy": stock_accuracy,
         "events": events, "alerts": alerts, "learn": learn,
         "diag": FLOW_DIAG[:8],
-        "weekly": weekly, "fx": fx,
+        "weekly": weekly, "fx": fx, "re": re_data,
     }
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
