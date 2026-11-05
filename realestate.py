@@ -5,6 +5,7 @@ import json
 import math
 import random
 import statistics as st
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -64,8 +65,15 @@ def fetch_month(key, code, ym):
     import requests
     items, page = [], 1
     while True:
-        r = requests.get(API, timeout=30, params={"serviceKey": key, "LAWD_CD": code,
-                                                  "DEAL_YMD": ym, "pageNo": page, "numOfRows": 1000})
+        for attempt in range(3):  # 서버가 느릴 때를 대비해 3번까지 다시 시도
+            try:
+                r = requests.get(API, timeout=40, params={"serviceKey": key, "LAWD_CD": code,
+                                                          "DEAL_YMD": ym, "pageNo": page, "numOfRows": 1000})
+                break
+            except requests.RequestException:
+                if attempt == 2:
+                    raise
+                time.sleep(3 * (attempt + 1))
         try:
             root = ET.fromstring(r.content)
         except ET.ParseError:
@@ -109,18 +117,25 @@ def collect(key, codes, priority, today, diag):
     yms = months_back(MONTHS, today)
     data = {c: _load_region(c) for c in codes}
     order = [c for c in priority if c in data] + [c for c in codes if c not in priority]
-    calls, stop = 0, None
+    calls, stop, fails = 0, None, 0
 
     def get(code, ym):
-        nonlocal calls, stop
+        nonlocal calls, stop, fails
         if stop:
             return False
         try:
             data[code][ym] = fetch_month(key, code, ym)
             calls += 1
+            fails = 0
             return True
         except Exception as e:
-            stop = str(e)[:160]
+            msg = str(e)[:160]
+            if msg.startswith(("API 오류", "응답 해석")):
+                stop = msg          # 한도 초과·키 문제는 바로 멈춤
+            else:
+                fails += 1          # 일시적인 연결 문제는 그 달만 건너뛰고 계속
+                if fails >= 8:
+                    stop = "연결 문제가 계속돼서 이번엔 여기까지 받았어요"
             return False
 
     for code in order:
