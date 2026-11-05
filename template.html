@@ -688,7 +688,8 @@ function renderRE(){
   const R = D.re, el = $("v-re");
   let html = `<div class="top"><h1>부동산</h1><div class="meta">${R ? `${esc(R.updated)} 기준 · 국토교통부 실거래가` : ""}</div></div>`;
   if (!R) { el.innerHTML = html + `<div class="card empty">apartments.csv에 단지를 등록하면 여기에 나와요.</div>`; return; }
-  if (R.error) html += `<div class="stale">실거래가를 가져오지 못했어요. ${esc(R.error)}</div>`;
+  if (R.error) html += `<div class="stale">${esc(R.error)}</div>`;
+  html += reSearchCard() + `<div id="reFavs"></div>`;
   R.apts.forEach((a, ai) => {
     const reg = R.regions.find(r => r.code === a.code), fc = reg && reg.forecast;
     html += `<div class="card"><div class="ct">${esc(a.name)} <button class="q" data-term="reest" aria-label="추정 시세 설명">?</button><span class="cap">${esc(a.dong)}${a.built ? ` · ${esc(a.built)}년 준공` : ""}</span></div>`;
@@ -710,21 +711,82 @@ function renderRE(){
     html += `</div>`;
     if (reg.news && reg.news.length) html += `<div class="card"><div class="ct">부동산 뉴스</div><ul class="news">${reg.news.map(x => { const u = /^https?:\/\//.test(x.link) ? x.link : ""; return `<li>${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}</li>`; }).join("")}</ul></div>`;
   });
+  const summ = R.summ || [];
+  if (summ.length) html += `<div class="card tight"><div class="ct">지역별 흐름 <button class="q" data-term="reidx" aria-label="설명">?</button><span class="cap">1년 전망</span></div>${["서울", "경기"].map(g => { const xs = summ.filter(s => s.group === g); return xs.length ? `<div class="sub-h">${g}</div>` + xs.map(s => `<div class="li" data-rgn="${esc(s.code)}" role="button" tabindex="0"><div class="tx"><div class="t1">${esc(s.name)}</div><div class="t2">${s.ppa ? `평당 ${eok(s.ppa * 3.3058)}` : "데이터 모으는 중"}${s.ret12 != null ? ` · 1년 <span class="${tone(s.ret12)}">${pct(s.ret12)}</span>` : ""}</div></div><div class="rv">${s.fc ? `<div class="r1 ${verdict(s.fc.m12.p_up)[1]}">${pp(s.fc.m12.p_up)}</div><div class="r2">상승 확률</div>` : `<div class="r2">계산 전</div>`}</div></div>`).join("") : ""; }).join("")}</div>`;
   html += `<p class="hint">실거래가는 계약 후 최대 30일 안에 신고돼서 최근 한두 달은 거래가 적게 보여요. 전망은 지역 흐름 기준의 거친 참고치예요.</p>`;
   el.innerHTML = html;
+  reSearch(); reFavFill();
 }
 function openRE(ai, i){
-  const R = D.re, a = R.apts[ai], ar = a.areas[i], reg = R.regions.find(r => r.code === a.code), fc = reg && reg.forecast;
+  const R = D.re, a = R.apts[ai], ar = a.areas[i], reg = R.regions.find(r => r.code === a.code);
+  openArea(a, ar, reg && reg.forecast, a.trades.filter(t => Math.round(t.area) === ar.area).map(t => [t.date, t.amt, t.floor]));
+}
+function openArea(a, ar, fc, tr){
   reSel = {ar, fc};
-  const tr = a.trades.filter(t => Math.round(t.area) === ar.area), s = ar.series, pre = Math.max(0, s.findIndex(x => x.ym >= String(+s[s.length - 1].ym.slice(0, 4) - 1) + s[s.length - 1].ym.slice(4)));
+  const s = ar.series, pre = Math.max(0, s.findIndex(x => x.ym >= String(+s[s.length - 1].ym.slice(0, 4) - 1) + s[s.length - 1].ym.slice(4)));
   const rows = fc ? RH.map(([k, n]) => `<tr><td>${n}</td><td class="${verdict(fc[k].p_up)[1]}"><b>${pp(fc[k].p_up)}</b></td><td>${eok(ar.est * (1 + fc[k].exp))}</td><td>${eok(ar.est * (1 + fc[k].lo))} ~ ${eok(ar.est * (1 + fc[k].hi))}</td></tr>`).join("") : "";
   openSheet(`${a.name} ${ar.area}㎡`, `<p class="small">${esc(a.region)} ${esc(a.dong)} · 약 ${Math.round(ar.area / 3.3058)}평</p>
     <div style="font-size:28px; font-weight:800; letter-spacing:-.02em">${eok(ar.est)}</div><p class="small"><button class="term" data-term="reest">추정 시세</button> · 3년간 거래 ${ar.n}건</p>
     <h4>월별 실거래가 (중간값)</h4>${reLine(s.map(x => x.p), s.map(x => x.n))}<div class="legend">${ymLabel(s[0].ym)} ~ ${ymLabel(s[s.length - 1].ym)} · 거래가 있었던 달만 이어서 표시</div>
     ${fc ? `<h4><button class="term" data-term="reidx">앞으로의 예상</button></h4><table class="dtable"><tr><th>기간</th><th>상승 확률</th><th>예상</th><th>범위</th></tr>${rows}</table>` : ""}
     <h4><button class="term" data-term="whatif">만약에 이때 샀다면</button></h4><div class="form"><select id="reBuy">${s.map((x, j) => `<option value="${x.ym}"${j === pre ? " selected" : ""}>${ymLabel(x.ym)} 거래 (${eok(x.p)})</option>`).join("")}</select></div><div id="reCalc"></div>
-    <h4><button class="term" data-term="retrade">최근 실거래</button></h4>${tr.slice(0, 12).map(t => `<div class="kv"><span>${esc(t.date)} · ${esc(t.floor)}층</span><span><b>${eok(t.amt)}</b></span></div>`).join("")}`);
+    <h4><button class="term" data-term="retrade">최근 실거래</button></h4>${tr.slice(0, 12).map(t => `<div class="kv"><span>${esc(t[0])} · ${esc(t[2])}층</span><span><b>${eok(t[1])}</b></span></div>`).join("")}`);
   reCalc();
+}
+const reFile = code => (reFile.c = reFile.c || {})[code] || (reFile.c[code] = fetch(`re/${code}.json?v=${encodeURIComponent(D.generated)}`).then(r => r.ok ? r.json() : null).catch(() => null));
+let reIndexP = null, reQ = "", reG = store.get("reG", "all"), reT = null, reFav = store.get("reFav", []), cxCur = null;
+const reIdx = () => reIndexP || (reIndexP = fetch(`re/index.json?v=${encodeURIComponent(D.generated)}`).then(r => r.ok ? r.json() : []).catch(() => []));
+const catOf = code => ((D.re && D.re.catalog) || []).find(c => c.code === code) || {name: code, group: ""};
+const isFav = (code, a, d) => reFav.some(f => f.code === code && f.a === a && f.d === d);
+function reSearchCard(){
+  const cat = D.re.catalog || [], ready = cat.filter(c => c.months >= 30).length;
+  return `<div class="card form" id="reSearch"><div class="ct">단지 검색 <button class="q" data-term="research" aria-label="검색 설명">?</button><span class="cap">${ready}/${cat.length}개 지역 준비됨</span></div>
+    <input id="req" type="search" enterkeyhint="search" placeholder="단지 이름이나 동 (예: 은마, 잠실동)" value="${esc(reQ)}" autocomplete="off">
+    <div class="pseg" id="reg">${[["all", "전체"], ["서울", "서울"], ["경기", "경기"]].map(([v, t]) => `<button data-g="${v}" aria-pressed="${reG === v}">${t}</button>`).join("")}</div>
+    <div id="reRes" style="margin:0 -20px"></div></div>`;
+}
+async function reSearch(){
+  const el = $("reRes"); if (!el) return;
+  const q = reQ.replace(/\s+/g, "");
+  if (!q) { el.innerHTML = ""; return; }
+  el.innerHTML = `<p class="small" style="padding:8px 20px">찾는 중…</p>`;
+  const idx = await reIdx();
+  if (q !== reQ.replace(/\s+/g, "")) return;
+  const hits = idx.filter(r => (reG === "all" || catOf(r[2]).group === reG) && (r[0].replace(/\s+/g, "").includes(q) || r[1].includes(q))).slice(0, 40);
+  el.innerHTML = hits.length ? hits.map(r => { const k = esc(r[2] + "|" + r[0] + "|" + r[1]); return `<div class="li" data-rex="${k}" role="button" tabindex="0">${ico(r[0])}<div class="tx"><div class="t1">${esc(r[0])}</div><div class="t2">${esc(catOf(r[2]).name)} ${esc(r[1])}${r[3] ? ` · ${esc(r[3])}년` : ""} · 3년 거래 ${r[4]}건</div></div><button class="star" data-refav="${k}" aria-pressed="${isFav(r[2], r[0], r[1])}" aria-label="${esc(r[0])} 관심 등록">★</button></div>`; }).join("")
+    : `<p class="small" style="padding:8px 20px">일치하는 단지가 없어요. 아직 데이터를 채우는 중인 지역이거나, 실거래가 자료의 이름과 다를 수 있어요. 한두 글자로 넓게 찾아보세요.</p>`;
+}
+async function reFavFill(){
+  const el = $("reFavs"); if (!el) return;
+  if (!reFav.length) { el.innerHTML = ""; return; }
+  const rows = await Promise.all(reFav.map(async f => { const file = await reFile(f.code); return {f, c: file && file.cx.find(x => x.a === f.a && x.d === f.d), fc: file && file.fc}; }));
+  el.innerHTML = `<div class="card tight"><div class="ct">관심 단지<span class="cap">추정 시세</span></div>${rows.map(({f, c, fc}) => {
+    if (!c) return `<div class="li"><div class="tx"><div class="t1">${esc(f.a)}</div><div class="t2">데이터를 찾지 못했어요</div></div></div>`;
+    const main = c.ar.slice().sort((x, y) => y.n - x.n)[0];
+    return `<div class="li" data-rex="${esc(f.code + "|" + f.a + "|" + f.d)}" role="button" tabindex="0">${ico(f.a)}<div class="tx"><div class="t1">${esc(f.a)}</div><div class="t2">${esc(catOf(f.code).name)} ${esc(f.d)} · 전용 ${main.area}㎡</div></div><div class="rv"><div class="r1">${eok(main.est)}</div>${fc ? `<div class="r2">1년 상승 <span class="${verdict(fc.m12.p_up)[1]}">${pp(fc.m12.p_up)}</span></div>` : ""}</div></div>`;
+  }).join("")}</div>`;
+}
+async function openCx(code, a, d){
+  const f = await reFile(code), c = f && f.cx.find(x => x.a === a && x.d === d);
+  if (!c) { alert("이 단지 데이터를 불러오지 못했어요."); return; }
+  cxCur = {obj: {name: c.a, region: f.name, dong: c.d}, c, fc: f.fc};
+  const fv = isFav(code, a, d);
+  openSheet(c.a, `<p class="small">${esc(f.name)} ${esc(c.d)}${c.b ? ` · ${esc(c.b)}년 준공` : ""} · 3년 거래 ${c.n}건</p>
+    <button class="btn sub" data-refav="${esc(code + "|" + a + "|" + d)}" aria-pressed="${fv}">${fv ? "★ 관심 단지에서 빼기" : "☆ 관심 단지에 추가"}</button>
+    ${c.ar.map((ar, i) => `<div class="reA" data-cxa="${i}" role="button" tabindex="0"><div class="ah"><span class="nm">전용 ${ar.area}㎡</span><span class="px">약 ${Math.round(ar.area / 3.3058)}평 · 거래 ${ar.n}건</span></div><div class="reP">${eok(ar.est)}</div><div class="t2">추정 시세 · 최근 거래 ${esc(ar.tr[0][0])} ${eok(ar.tr[0][1])} (${esc(ar.tr[0][2])}층)</div>${f.fc ? reChips(f.fc) : ""}</div>`).join("")}
+    ${f.fc ? "" : `<p class="small">이 지역은 아직 1년 치 데이터가 모이지 않아 전망은 계산 전이에요.</p>`}`);
+}
+function openCxArea(i){
+  const {obj, c, fc} = cxCur, ar = c.ar[i];
+  openArea(obj, {area: ar.area, est: ar.est, n: ar.n, series: ar.s.map(x => ({ym: x[0], p: x[1], n: x[2]}))}, fc, ar.tr);
+}
+async function openRegion(code){
+  const f = await reFile(code); if (!f) { alert("이 지역 데이터를 불러오지 못했어요."); return; }
+  const idx = f.idx, fc = f.fc, sg = f.sig || {}, last = [...idx].reverse().find(x => x.ppa);
+  openSheet(`${f.name} 아파트 흐름`, `${last ? `<div style="font-size:28px; font-weight:800; letter-spacing:-.02em">평당 ${eok(last.ppa * 3.3058)}</div><p class="small">${ymLabel(last.ym)} 거래 기준${sg.ret12 != null ? ` · 1년 ${pct(sg.ret12)} · 3개월 ${pct(sg.ret3)}` : ""}</p>` : ""}
+    ${reLine(idx.map(x => x.ppa ? x.ppa * 3.3058 : null), idx.map(x => x.n))}<div class="legend"><b style="background:var(--blue)"></b>평당 가격 <b style="background:var(--faint)"></b>거래량</div>
+    ${fc ? `<h4><button class="term" data-term="reidx">앞으로의 예상</button></h4><table class="dtable"><tr><th>기간</th><th>상승 확률</th><th>예상</th><th>범위</th></tr>${RH.map(([k, n]) => `<tr><td>${n}</td><td class="${verdict(fc[k].p_up)[1]}"><b>${pp(fc[k].p_up)}</b></td><td class="${tone(fc[k].exp)}">${pct(fc[k].exp)}</td><td>${pct(fc[k].lo)} ~ ${pct(fc[k].hi)}</td></tr>`).join("")}</table>` : `<p class="small">1년 이상 데이터가 모이면 전망이 계산돼요.</p>`}
+    <h4>거래 많은 단지</h4><div style="margin:0 -20px">${f.cx.slice(0, 15).map(c => `<div class="li" data-rex="${esc(code + "|" + c.a + "|" + c.d)}" role="button" tabindex="0">${ico(c.a)}<div class="tx"><div class="t1">${esc(c.a)}</div><div class="t2">${esc(c.d)} · 거래 ${c.n}건</div></div></div>`).join("")}</div>`);
 }
 function reCalc(){
   const el = $("reCalc"), s = $("reBuy"); if (!el || !s || !reSel) return;
@@ -859,6 +921,10 @@ const GLOSS = {
     what: "이 가격이 되면 팔겠다고 미리 정해두는 가격이에요. 목표가는 이익을 챙길 가격, 손절가는 더 큰 손실을 막으려고 팔 가격이에요.",
     easy: "출발 전에 '여기까지 가면 내린다'고 정해두는 정류장이에요.",
     read: ["현재가가 목표가 이상이면 '목표 도달', 손절가 이하면 '손절가 도달' 배지가 붙어요.", "둘 다 넣으면 막대에서 지금 가격이 손절가(왼쪽)와 목표가(오른쪽) 사이 어디쯤인지 보여줘요.", "보유 정보는 이 기기에만 있어서 푸시 알림은 오지 않아요. 앱을 열 때 확인하세요.", "종목을 눌러 상세 화면의 '보유 정보 수정'에서 언제든 바꿀 수 있어요."]},
+  research: {t: "단지 검색",
+    what: "서울 25개 구와 경기 주요 시의 최근 3년 실거래가를 미리 모아두고, 그 안에서 단지 이름이나 동 이름으로 찾아요.",
+    easy: "도서관에 미리 꽂아둔 책 중에서 제목으로 찾는 거예요. 없는 지역은 새로 들여놔야 해요.",
+    read: ["이름은 국토부 실거래가 자료에 적힌 대로라서 광고 이름과 다를 수 있어요. 한두 글자만 넣어 넓게 찾아보세요.", "처음 며칠은 하루 호출 한도 때문에 지역 데이터를 나눠서 채워요. '준비됨' 숫자가 다 차면 3년 치가 모인 거예요.", "★를 누르면 관심 단지로 저장돼 부동산 탭 위쪽에 고정돼요. 이 기기에만 저장돼요.", "목록에 없는 지역은 저장소의 regions.csv에 한 줄 추가하면 다음 실행부터 모여요."]},
   reest: {t: "추정 시세 (아파트)",
     what: "이 단지·평형의 최근 실거래 최대 5건을, 거래 이후 지역 가격이 움직인 만큼 보정해서 중간값을 낸 값이에요.",
     easy: "'최근에 이 값에 팔렸고, 그 뒤로 동네 시세가 이만큼 움직였으니 지금은 이 정도겠다'는 계산이에요.",
@@ -880,7 +946,7 @@ const GLOSS = {
     easy: "광고에 붙은 '부르는 값(호가)'이 아니라 실제로 도장 찍은 값이에요.",
     read: ["같은 단지·평형이라도 층, 향, 수리 상태에 따라 수천만 원씩 차이 나요.", "가족 간 거래처럼 시세보다 낮은 특이 거래가 섞일 수 있어요.", "계약이 취소된 거래는 빼고 보여줘요."]}
 };
-const GLOSS_ORDER = ["prob", "range", "price", "horizon", "trend", "mom", "rsi", "news", "flow", "per", "div", "map", "picks", "hold", "target", "fxk", "whatif", "compare", "weekly", "reest", "reidx", "retrend", "revol", "retrade", "events", "fomc", "cpi", "bok", "earn", "alert", "acc", "strong", "weights", "vix", "fx", "rate"];
+const GLOSS_ORDER = ["prob", "range", "price", "horizon", "trend", "mom", "rsi", "news", "flow", "per", "div", "map", "picks", "hold", "target", "fxk", "whatif", "compare", "weekly", "research", "reest", "reidx", "retrend", "revol", "retrade", "events", "fomc", "cpi", "bok", "earn", "alert", "acc", "strong", "weights", "vix", "fx", "rate"];
 function glossBody(g){
   return `<h4>무슨 뜻이에요?</h4><p>${g.what}</p><h4>쉽게 말하면</h4><p>${g.easy}</p><h4>이렇게 보세요</h4><ul>${g.read.map(x => `<li>${x}</li>`).join("")}</ul>`;
 }
@@ -909,6 +975,17 @@ document.addEventListener("click", e => {
     if (confirm(`${a ? a.name : "이 종목"}을(를) 목록에서 지울까요?`)) { holds.splice(+el.dataset.del, 1); store.set("hold", holds); renderMine(); }
     return;
   }
+  if ((el = T("[data-refav]"))) {
+    const key = el.dataset.refav, [code, a, d] = key.split("|"), i = reFav.findIndex(f => f.code === code && f.a === a && f.d === d);
+    if (i >= 0) reFav.splice(i, 1); else reFav.push({code, a, d});
+    store.set("reFav", reFav);
+    document.querySelectorAll("[data-refav]").forEach(b => { if (b.dataset.refav === key) { b.setAttribute("aria-pressed", i < 0); if (b.classList.contains("btn")) b.textContent = i < 0 ? "★ 관심 단지에서 빼기" : "☆ 관심 단지에 추가"; } });
+    reFavFill(); return;
+  }
+  if ((el = T("#reg [data-g]"))) { reG = el.dataset.g; store.set("reG", reG); document.querySelectorAll("#reg button").forEach(b => b.setAttribute("aria-pressed", b === el)); reSearch(); return; }
+  if ((el = T("[data-rex]"))) { const [c, a, d] = el.dataset.rex.split("|"); openCx(c, a, d); return; }
+  if ((el = T("[data-cxa]"))) { openCxArea(+el.dataset.cxa); return; }
+  if ((el = T("[data-rgn]"))) { openRegion(el.dataset.rgn); return; }
   if ((el = T("[data-re]"))) { const [x, y] = el.dataset.re.split(":").map(Number); openRE(x, y); return; }
   if ((el = T("[data-detail]"))) { openDetail(el.dataset.detail); return; }
   if (T("#addHold")) { holdForm(); return; }
@@ -939,7 +1016,10 @@ document.addEventListener("keydown", e => {
   if (el && el.tagName !== "BUTTON") { e.preventDefault(); el.click(); }
 });
 const wiRead = () => { wi = {k: $("wik").value, amt: $("wia").value, buy: $("wib").value, ev: $("wie").value}; store.set("wi", wi); calcWhatif(); };
-document.addEventListener("input", e => { if (e.target.closest && e.target.closest("#whatif")) wiRead(); });
+document.addEventListener("input", e => {
+  if (e.target.closest && e.target.closest("#whatif")) wiRead();
+  else if (e.target.id === "req") { reQ = e.target.value; clearTimeout(reT); reT = setTimeout(reSearch, 200); }
+});
 document.addEventListener("change", e => {
   if (e.target.closest && e.target.closest("#whatif")) wiRead();
   else if (e.target.id === "cmpb") { cmp.b = e.target.value; drawCompare(); }
