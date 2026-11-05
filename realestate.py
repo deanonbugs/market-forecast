@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
-"""부동산: 국토부 아파트 매매 실거래가(상세) + 지역 흐름 + 뉴스 → 시세 추정과 전망"""
+"""부동산: 국토부 아파트 매매 실거래가(상세) → 지역 흐름·단지 시세 추정·전망·검색용 데이터"""
 import csv
-import datetime as dt
 import json
 import math
 import random
@@ -10,10 +9,12 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
-CACHE = BASE / "realestate_cache.json"
+CACHE = BASE / "realestate_cache.json"      # 예전 형식 (있으면 옮겨오고 지움)
+CACHE_DIR = BASE / "re_cache"               # 지역별 원자료 (GitHub Actions 캐시에 보관)
 API = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
-MONTHS = 36    # 모아둘 기간 (개월)
-REFRESH = 3    # 매번 다시 받는 최근 개월 수 (늦게 신고되는 거래 반영)
+MONTHS = 36        # 모아둘 기간 (개월)
+REFRESH = 3        # 하루 한 번 다시 받는 최근 개월 수 (늦게 신고되는 거래 반영)
+FILL_BUDGET = 350  # 한 번 실행할 때 빈 달을 채우는 최대 호출 수 (하루 호출 한도 보호)
 HZ = {"m3": 3, "m6": 6, "m12": 12}
 W = {"news": .25, "trend": .30, "mom": .25, "volume": .20}
 TILT = 0.2
@@ -23,19 +24,22 @@ F = {"apt": ("aptNm", "아파트"), "dong": ("umdNm", "법정동"), "area": ("ex
      "cancel": ("cdealType", "해제여부")}
 
 
-def read_apts():
-    p = BASE / "apartments.csv"
+def _csv(name):
+    p = BASE / name
     if not p.exists():
         return []
     with open(p, encoding="utf-8-sig") as f:
         rows = [r for r in csv.reader(f) if r and not r[0].lstrip().startswith("#")]
-    out = []
-    for r in rows[1:]:
-        r = [x.strip() for x in r] + [""] * 6
-        if r[0] and r[1]:
-            out.append({"name": r[0], "code": r[1], "region": r[2] or r[1], "dong": r[3],
-                        "kw": r[4] or r[0], "area": r[5]})
-    return out
+    return [[x.strip() for x in r] + [""] * 6 for r in rows[1:]]
+
+
+def read_apts():
+    return [{"name": r[0], "code": r[1], "region": r[2] or r[1], "dong": r[3], "kw": r[4] or r[0], "area": r[5]}
+            for r in _csv("apartments.csv") if r[0] and r[1]]
+
+
+def read_regions():
+    return [{"code": r[0], "name": r[1] or r[0], "group": r[2]} for r in _csv("regions.csv") if r[0]]
 
 
 def months_back(n, today):
@@ -79,34 +83,68 @@ def fetch_month(key, code, ym):
                 d = f"{int(_get(it, 'y')):04d}-{int(_get(it, 'm')):02d}-{int(_get(it, 'd')):02d}"
             except ValueError:
                 continue
-            items.append({"apt": _get(it, "apt"), "dong": _get(it, "dong"), "area": area, "amt": amt,
-                          "date": d, "floor": _get(it, "floor"), "built": _get(it, "built")})
+            items.append([_get(it, "apt"), _get(it, "dong"), area, amt, d, _get(it, "floor"), _get(it, "built")])
         total = int((root.findtext(".//totalCount") or "0").strip() or 0)
         if page * 1000 >= total:
             return items
         page += 1
 
 
-def collect(key, codes, today, diag):
+def _load_region(code):
     try:
-        cache = json.loads(CACHE.read_text(encoding="utf-8"))
+        return json.loads((CACHE_DIR / f"{code}.json").read_text(encoding="utf-8"))
     except Exception:
-        cache = {}
+        pass
+    try:  # 예전 형식에서 옮겨오기
+        old = json.loads(CACHE.read_text(encoding="utf-8")).get(code, {})
+        return {ym: [[t["apt"], t["dong"], t["area"], t["amt"], t["date"], t["floor"], t["built"]] for t in v]
+                for ym, v in old.items()}
+    except Exception:
+        return {}
+
+
+def collect(key, codes, priority, today, diag):
+    """최근 3개월은 하루 한 번 갱신, 빈 달은 예산 안에서 최근 달부터 채움"""
+    CACHE_DIR.mkdir(exist_ok=True)
     yms = months_back(MONTHS, today)
-    for code in codes:
-        c = cache.setdefault(code, {})
-        got = 0
-        for ym in yms:
-            if ym in c and ym not in yms[-REFRESH:]:
-                continue
-            c[ym] = fetch_month(key, code, ym)
-            got += 1
-        for ym in list(c):
-            if ym not in yms:
-                del c[ym]
-        diag.append(f"{code}: {got}개월 새로 받음, 총 {sum(len(v) for v in c.values())}건")
-    CACHE.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
-    return cache
+    data = {c: _load_region(c) for c in codes}
+    order = [c for c in priority if c in data] + [c for c in codes if c not in priority]
+    calls, stop = 0, None
+
+    def get(code, ym):
+        nonlocal calls, stop
+        if stop:
+            return False
+        try:
+            data[code][ym] = fetch_month(key, code, ym)
+            calls += 1
+            return True
+        except Exception as e:
+            stop = str(e)[:160]
+            return False
+
+    for code in order:
+        if data[code].get("_refreshed") != today.isoformat():
+            if all([get(code, ym) for ym in yms[-REFRESH:]]):
+                data[code]["_refreshed"] = today.isoformat()
+    filled = 0
+    for ym in reversed(yms[:-REFRESH]):
+        for code in order:
+            if filled >= FILL_BUDGET or stop:
+                break
+            if ym not in data[code] and get(code, ym):
+                filled += 1
+    for code, c in data.items():
+        for k in [k for k in c if not k.startswith("_") and k not in yms]:
+            del c[k]
+        (CACHE_DIR / f"{code}.json").write_text(json.dumps(c, ensure_ascii=False, separators=(",", ":")),
+                                                encoding="utf-8")
+    if CACHE.exists():
+        CACHE.unlink()
+    diag.append(f"호출 {calls}회" + (f" · 중단: {stop}" if stop else ""))
+    return {code: {ym: [{"apt": r[0], "dong": r[1], "area": r[2], "amt": r[3], "date": r[4], "floor": r[5],
+                         "built": r[6]} for r in rows] for ym, rows in c.items() if not ym.startswith("_")}
+            for code, c in data.items()}, stop
 
 
 def ym_of(date):
@@ -161,93 +199,136 @@ def forecast(rows, news_score):
     return fc, sig
 
 
+def area_view(xs, sm, now_ix):
+    adj = [t["amt"] * now_ix / sm[ym_of(t["date"])] for t in xs[-5:] if now_ix and sm.get(ym_of(t["date"]))]
+    ser = {}
+    for t in xs:
+        ser.setdefault(ym_of(t["date"]), []).append(t["amt"])
+    return {"area": round(xs[0]["area"]), "n": len(xs), "est": round(st.median(adj)) if adj else xs[-1]["amt"],
+            "last": xs[-1], "series": [{"ym": ym, "p": round(st.median(v)), "n": len(v)} for ym, v in sorted(ser.items())]}
+
+
 def apt_view(a, months, sm, now_ix):
     allt = [t for ym in sorted(months) for t in months[ym]]
     in_dong = [t for t in allt if not a["dong"] or a["dong"] in t["dong"]]
     trades = [t for t in in_dong if a["kw"] in t["apt"]]
     if a["area"]:
         try:
-            target = float(a["area"])
-            trades = [t for t in trades if abs(t["area"] - target) < 3]
+            trades = [t for t in trades if abs(t["area"] - float(a["area"])) < 3]
         except ValueError:
             pass
     trades.sort(key=lambda t: t["date"])
     groups = {}
     for t in trades:
         groups.setdefault(round(t["area"]), []).append(t)
-    areas = []
-    for ar, ts in sorted(groups.items()):
-        adj = [t["amt"] * now_ix / sm[ym_of(t["date"])] for t in ts[-5:]
-               if now_ix and sm.get(ym_of(t["date"]))]
-        series = {}
-        for t in ts:
-            series.setdefault(ym_of(t["date"]), []).append(t["amt"])
-        areas.append({"area": ar, "n": len(ts), "est": round(st.median(adj)) if adj else ts[-1]["amt"],
-                      "last": ts[-1], "first": ts[0]["date"],
-                      "series": [{"ym": ym, "p": round(st.median(v)), "n": len(v)} for ym, v in sorted(series.items())]})
     return {"name": a["name"], "code": a["code"], "region": a["region"], "dong": a["dong"], "kw": a["kw"],
             "built": next((t["built"] for t in trades if t["built"]), ""),
-            "areas": areas, "trades": [dict(t, area=round(t["area"], 2)) for t in trades[-30:][::-1]],
+            "areas": [area_view(xs, sm, now_ix) for _, xs in sorted(groups.items())],
+            "trades": [dict(t, area=round(t["area"], 2)) for t in trades[-30:][::-1]],
             "dong_names": [] if trades else sorted({t["apt"] for t in in_dong})[:30]}
 
 
-def demo_months(code, today):
-    rnd, out, lvl = random.Random(code), {}, 7000.0
-    names = ["대청", "개포자이", "래미안블레스티지", "디에이치아너힐즈"]
-    for ym in months_back(MONTHS, today):
-        lvl *= math.exp(rnd.gauss(0.004, 0.012))
-        rows = []
-        for _ in range(rnd.randint(150, 400)):
-            area = rnd.choice([39.5, 49.9, 60.8, 84.9, 114.2])
-            nm = rnd.choice(names)
-            amt = int(lvl * area * rnd.uniform(.85, 1.15) * (0.8 if nm == "대청" else 1.1) / 100) * 100
-            rows.append({"apt": nm, "dong": "개포동", "area": area, "amt": amt,
-                         "date": f"{ym[:4]}-{ym[4:]}-{rnd.randint(1, 28):02d}",
-                         "floor": str(rnd.randint(1, 15)), "built": "1992" if nm == "대청" else "2019"})
-        out[ym] = rows
+def complexes(months, sm, now_ix):
+    groups = {}
+    for ym in sorted(months):
+        for t in months[ym]:
+            groups.setdefault((t["apt"], t["dong"]), []).append(t)
+    out = []
+    for (apt, dong), ts in groups.items():
+        ts.sort(key=lambda t: t["date"])
+        byar = {}
+        for t in ts:
+            byar.setdefault(round(t["area"]), []).append(t)
+        ars = []
+        for _, xs in sorted(byar.items()):
+            v = area_view(xs, sm, now_ix)
+            ars.append({"area": v["area"], "est": v["est"], "n": v["n"],
+                        "tr": [[t["date"], t["amt"], t["floor"]] for t in xs[-6:][::-1]],
+                        "s": [[x["ym"], x["p"], x["n"]] for x in v["series"]]})
+        out.append({"a": apt, "d": dong, "b": next((t["built"] for t in ts if t["built"]), ""), "n": len(ts), "ar": ars})
+    out.sort(key=lambda c: -c["n"])
     return out
 
 
-def build(key, fetch_news, lexicon_score, today, demo=False):
-    apts = read_apts()
-    if not apts:
+def demo_months(code, today):
+    rnd, out, lvl = random.Random(code), {}, random.Random(code).uniform(3000, 8000)
+    names = (["대청", "개포자이", "래미안블레스티지", "은마"] if code == "11680"
+             else [f"{w}{k}" for w in ("래미안", "자이", "푸르지오", "힐스테이트") for k in ("1단지", "2차", "센트럴")])
+    for ym in months_back(MONTHS, today):
+        lvl *= math.exp(rnd.gauss(0.004, 0.012))
+        out[ym] = [{"apt": (nm := rnd.choice(names)), "dong": "개포동" if code == "11680" else rnd.choice(["가동", "나동"]),
+                    "area": (ar := rnd.choice([39.5, 59.9, 84.9, 114.2])),
+                    "amt": int(lvl * ar * rnd.uniform(.85, 1.15) / 100) * 100,
+                    "date": f"{ym[:4]}-{ym[4:]}-{rnd.randint(1, 28):02d}", "floor": str(rnd.randint(1, 15)),
+                    "built": "1992" if nm == "대청" else "2015"} for _ in range(rnd.randint(80, 200))]
+    return out
+
+
+def build(key, fetch_news, lexicon_score, today, out_dir, demo=False):
+    apts, regions = read_apts(), read_regions()
+    if not apts and not regions:
         return None
-    diag, res = [], {"updated": today.isoformat(), "regions": [], "apts": [], "error": ""}
-    codes = sorted({a["code"] for a in apts})
+    names = {r["code"]: r for r in regions}
+    for a in apts:
+        names.setdefault(a["code"], {"code": a["code"], "name": a["region"], "group": ""})
+    codes = list(names)
+    prio = [a["code"] for a in apts]
+    diag, res = [], {"updated": today.isoformat(), "regions": [], "apts": [], "error": "", "catalog": [], "summ": []}
     if demo:
-        cache = {c: demo_months(c, today) for c in codes}
+        months_all, stop = {c: demo_months(c, today) for c in codes[:4] + prio}, None
     elif not key:
         res["error"] = "GitHub 비밀값 DATA_GO_KR_KEY가 없어요."
         return res
     else:
         try:
-            cache = collect(key, codes, today, diag)
+            months_all, stop = collect(key, codes, prio, today, diag)
         except Exception as e:
             res["error"], res["diag"] = str(e)[:200], diag
             return res
+        if stop:
+            res["error"] = f"일부만 받았어요 (다음 실행 때 이어서 받아요): {stop}"
+    od = Path(out_dir) / "re"
+    od.mkdir(parents=True, exist_ok=True)
+    index = []
     for code in codes:
-        months = cache.get(code, {})
+        months = months_all.get(code) or {}
+        info = names[code]
         rows = region_index(months)
-        name = next(a["region"] for a in apts if a["code"] == code)
-        queries = [f"{name} 아파트값", f"{name} 부동산"] + [f"{a['dong']} {a['kw']}" for a in apts if a["code"] == code]
-        news, seen = [], set()
-        for q in queries:
-            try:
-                items = [] if demo else fetch_news(q, "KR", 5)
-            except Exception:
-                items = []
-            for n in items:
-                if n["title"] not in seen:
-                    seen.add(n["title"])
-                    news.append(n)
-        if demo:
-            news = [{"title": f"{name} 아파트값 상승폭 확대", "link": ""}, {"title": "대출 규제에 거래 위축 우려", "link": ""}]
-        score = lexicon_score([n["title"] for n in news])
-        fc, sig = forecast(rows, score)
+        news = []
+        if code in prio:
+            queries = [f"{info['name']} 아파트값", f"{info['name']} 부동산"] + [f"{a['dong']} {a['kw']}" for a in apts if a["code"] == code]
+            seen = set()
+            for q in queries:
+                try:
+                    items = [] if demo else fetch_news(q, "KR", 5)
+                except Exception:
+                    items = []
+                for n in items:
+                    if n["title"] not in seen:
+                        seen.add(n["title"])
+                        news.append(n)
+            if demo:
+                news = [{"title": f"{info['name']} 아파트값 상승폭 확대", "link": ""}, {"title": "대출 규제에 거래 위축 우려", "link": ""}]
+        fc, sig = forecast(rows, lexicon_score([n["title"] for n in news]))
         sm = smooth(rows[:-1])
         now_ix = next((sm[r["ym"]] for r in reversed(rows[:-1]) if sm.get(r["ym"])), None)
-        res["regions"].append({"code": code, "name": name, "index": rows, "forecast": fc,
-                               "signals": sig, "news": news[:8]})
-        res["apts"] += [apt_view(a, months, sm, now_ix) for a in apts if a["code"] == code]
+        filled = sum(1 for r in rows if r["n"])
+        res["catalog"].append({"code": code, "name": info["name"], "group": info["group"], "months": filled})
+        if not months:
+            continue
+        last = next((r for r in reversed(rows) if r["ppa"]), None)
+        res["summ"].append({"code": code, "name": info["name"], "group": info["group"], "fc": fc,
+                            "ret12": sig.get("ret12"), "ppa": last["ppa"] if last else None})
+        cx = complexes(months, sm, now_ix)
+        index += [[c["a"], c["d"], code, c["b"], c["n"]] for c in cx]
+        (od / f"{code}.json").write_text(json.dumps({"code": code, "name": info["name"], "fc": fc, "sig": sig,
+                                                     "idx": rows, "cx": cx}, ensure_ascii=False,
+                                                    separators=(",", ":")), encoding="utf-8")
+        if code in prio:
+            res["regions"].append({"code": code, "name": info["name"], "index": rows, "forecast": fc,
+                                   "signals": sig, "news": news[:8]})
+            res["apts"] += [apt_view(a, months, sm, now_ix) for a in apts if a["code"] == code]
+    index.sort(key=lambda r: -r[4])
+    (od / "index.json").write_text(json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     res["diag"] = diag
     return res
