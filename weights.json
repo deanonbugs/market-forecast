@@ -1,25 +1,25 @@
 {
  "day": {
-  "n": 272,
+  "n": 306,
   "min": 200,
   "active": true,
   "acc": {
-   "news": 0.466,
-   "rsi": 0.532,
-   "mom": 0.449,
-   "trend": 0.463,
+   "news": 0.492,
+   "rsi": 0.547,
+   "mom": 0.438,
+   "trend": 0.454,
    "flow": null
   },
   "weights": {
-   "news": 0.281,
-   "rsi": 0.401,
-   "mom": 0.119,
-   "trend": 0.077,
-   "flow": 0.122
+   "news": 0.35,
+   "rsi": 0.4,
+   "mom": 0.083,
+   "trend": 0.059,
+   "flow": 0.109
   }
  },
  "week": {
-  "n": 2,
+  "n": 34,
   "min": 200,
   "active": false,
   "acc": {
