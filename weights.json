@@ -1,40 +1,40 @@
 {
  "day": {
-  "n": 884,
+  "n": 920,
   "min": 200,
   "active": true,
   "acc": {
-   "news": 0.519,
-   "rsi": 0.518,
-   "mom": 0.502,
-   "trend": 0.515,
+   "news": 0.52,
+   "rsi": 0.506,
+   "mom": 0.51,
+   "trend": 0.521,
    "flow": 0.473
   },
   "weights": {
-   "news": 0.377,
-   "rsi": 0.267,
-   "mom": 0.185,
-   "trend": 0.104,
+   "news": 0.382,
+   "rsi": 0.241,
+   "mom": 0.2,
+   "trend": 0.11,
    "flow": 0.066
   }
  },
  "week": {
-  "n": 612,
+  "n": 648,
   "min": 200,
   "active": true,
   "acc": {
-   "news": 0.429,
-   "rsi": 0.509,
-   "mom": 0.548,
-   "trend": 0.57,
+   "news": 0.434,
+   "rsi": 0.503,
+   "mom": 0.546,
+   "trend": 0.563,
    "flow": 0.345
   },
   "weights": {
-   "news": 0.073,
-   "rsi": 0.211,
-   "mom": 0.358,
-   "trend": 0.329,
-   "flow": 0.029
+   "news": 0.084,
+   "rsi": 0.204,
+   "mom": 0.361,
+   "trend": 0.322,
+   "flow": 0.03
   }
  },
  "month": {
